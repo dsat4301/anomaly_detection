@@ -2,6 +2,8 @@ import numpy as np
 from numpy.testing import assert_raises, assert_array_equal, assert_allclose
 
 
+# refers to scikit-learn's estimator_checks.check_outliers_train
+# line assert_array_equal(np.unique(y_pred), np.array([-1, 1])) is neither satisfiable nor useful
 # noinspection PyPep8Naming
 def check_outliers_train(estimator):
     n_samples = 300
