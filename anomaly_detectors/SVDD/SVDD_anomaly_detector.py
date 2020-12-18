@@ -2,8 +2,8 @@ from collections import OrderedDict
 from typing import Callable, Sequence
 
 import mlflow
-import torch
 import numpy as np
+import torch
 from base_networks import EncoderLinear, Encoder
 from sklearn.metrics import make_scorer, average_precision_score
 from sklearn.utils.validation import check_is_fitted, check_array
@@ -29,7 +29,6 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
             linear: bool = True,
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
-            threshold: int = .5,
             scorer: Callable = make_scorer(average_precision_score, needs_threshold=True)):
 
         super().__init__(
@@ -37,16 +36,25 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
             n_jobs_dataloader=n_jobs_dataloader,
             n_epochs=n_epochs,
             device=device,
-            threshold=threshold,
-            scorer=scorer)
+            scorer=scorer,
+            learning_rate=learning_rate,
+            linear=linear,
+            n_hidden_features=n_hidden_features,
+            random_state=random_state,
+            novelty=True)
 
         self.optimizer_name = optimizer_name
-        self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.latent_dimensions = latent_dimensions
-        self.linear = linear
-        self.n_hidden_features = n_hidden_features
-        self.random_state = random_state
+
+    @property
+    def offset_(self):
+        return self._offset_
+
+    @offset_.setter
+    def offset_(self, value: float):
+        # noinspection PyAttributeOutsideInit
+        self._offset_ = value
 
     @property
     def _networks(self) -> Sequence[torch.nn.Module]:
@@ -60,7 +68,7 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
         return reset_loss
 
     # noinspection PyPep8Naming,SpellCheckingInspection
-    def decision_function(self, X):
+    def score_samples(self, X):
         """ Return the anomaly score.
         :param X: np.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and
@@ -111,6 +119,7 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
 
         self.c_ = self._get_initial_center_c(train_loader)
         self.loss_ = 0
+        self._offset_ = 0
 
     def _get_initial_center_c(self, train_loader: DataLoader, eps=0.1):
         """Initialize hypersphere center c as the mean from an initial forward pass on the data."""

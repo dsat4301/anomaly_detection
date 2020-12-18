@@ -7,29 +7,77 @@ import numpy as np
 import torch
 from base_dataset import BaseDataset
 from sklearn.base import BaseEstimator, OutlierMixin
-from sklearn.metrics import make_scorer, average_precision_score
 from sklearn.utils import check_X_y, check_array
+from sklearn.utils.validation import check_is_fitted
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
 
 class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
+    """ Base anomaly detector class implementing scikit-learn's BaseEstimator and OutlierMixin
+
+    batch_size : int, default=256
+        Batch size.
+    n_jobs_dataloader : int, default=4
+        Value for parameter num_workers of torch.utils.data.DataLoader
+        (https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
+        Indicates how many subprocesses to use for data loading with values greater 0 enabling
+        multi-process data loading.
+    n_epochs : int, default=10
+        Number of epochs.
+    device : {'cpu', 'cuda'}, default='cpu'
+        Specifies the computational device using device agnostic code:
+        (https://pytorch.org/docs/stable/notes/cuda.html).
+    threshold : float = .5
+        Threshold to be used for predict function.
+        Values greater than or equal to threshold will be classified as anomalies.
+    scorer : Callable, default=make_scorer(roc_auc_score, needs_threshold=True)
+        Scorer instance to be used in score function.
+    learning_rate : int, default=0.0001
+        Learning rate.
+    linear : bool, default=True
+        Specifies if only linear layers without activation should be used in the subnetworks.
+    n_hidden_features : Sequence[int], default=None
+        Is Ignored if liner is True.
+        Determines the number of neurons to be used in the subnetwork layers.
+        Expects a Sequence with decreasingly ordered values with the last value greater than size_z.
+    random_state : int, default=None
+        Value for torch.seed. If None, no seed will be used.
+    """
 
     def __init__(
             self,
-            batch_size: int = 128,
-            n_jobs_dataloader: int = 0,
-            n_epochs: int = 10,
-            device: str = 'cpu',
-            threshold: int = .5,
-            scorer: Callable = make_scorer(average_precision_score, needs_threshold=True)):
+            batch_size: int,
+            n_jobs_dataloader: int,
+            n_epochs: int,
+            device: str,
+            scorer: Callable,
+            learning_rate: float,
+            linear: bool,
+            n_hidden_features: Sequence[int],
+            random_state: int,
+            novelty: bool):
 
         self.batch_size = batch_size
         self.n_jobs_dataloader = n_jobs_dataloader
         self.n_epochs = n_epochs
         self.device = device
-        self.threshold = threshold
         self.scorer = scorer
+        self.learning_rate = learning_rate
+        self.linear = linear
+        self.n_hidden_features = n_hidden_features
+        self.random_state = random_state
+        self.novelty = novelty
+
+    @property
+    @abstractmethod
+    def offset_(self):
+        raise NotImplemented
+
+    @offset_.setter
+    @abstractmethod
+    def offset_(self, value: np.ndarray):
+        raise NotImplemented
 
     @property
     @abstractmethod
@@ -43,13 +91,13 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
 
     # noinspection PyPep8Naming,PyAttributeOutsideInit
     def fit(self, X: np.ndarray, y: np.ndarray = None, **kwargs):
-        """ Trains generator and discriminator based on the normal samples in X.
+        """ Trains generator and discriminator based on the normal samples in data.
 
         :param X : np.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and
             n_features is the number of features.
         :param y : binary np.ndarray of with shape (n_samples,), default=None
-            If given, y is used to filter normal values from X. This means only the samples of X
+            If given, y is used to filter normal values from data. This means only the samples of data
             with the smaller label in y are used for training.
         :param kwargs :
             is_logging_enabled: bool, default=False
@@ -69,12 +117,12 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
             if len(np.unique(y)) > 2:
                 raise ValueError
 
-            normal_data = X[y == min(y)]
+            normal_data = np.array(X[y == min(y)])
             if len(normal_data) == 0:
-                print(y)
                 raise ValueError
         else:
-            normal_data = check_array(X)
+            # noinspection PyTypeChecker
+            normal_data = np.array(check_array(X))
 
         # noinspection PyAttributeOutsideInit
         self.n_features_in_ = np.array(X).shape[1]
@@ -118,9 +166,12 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
         return self
 
     # noinspection PyPep8Naming
-    @abstractmethod
     def decision_function(self, X: np.ndarray):
-        raise NotImplemented
+
+        X, _ = self._check_ready_for_prediction(X)
+        anomaly_score = self.score_samples(X)
+
+        return anomaly_score - self.offset_
 
     # noinspection PyPep8Naming
     def score(self, X: np.ndarray, y: np.ndarray):
@@ -133,7 +184,9 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
         :return : float
             Scalar score value.
         """
-        X, y = check_X_y(X, y)
+
+        X, y = self._check_ready_for_prediction(X, y)
+
         return self.scorer(estimator=self, X=X, y_true=y)
 
     # noinspection PyPep8Naming
@@ -146,10 +199,17 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
             Binary array with -1 indicating an anomaly and 1 indicating normal data.
         """
 
-        anomaly_scores = self.decision_function(X)
+        X, _ = self._check_ready_for_prediction(X)
+
+        decision_function = self.decision_function(X)
         v_mapping = np.vectorize(lambda x: -1 if x else 1)
 
-        return v_mapping((anomaly_scores >= self.threshold))
+        return v_mapping((decision_function <= 0))
+
+    # noinspection PyPep8Naming
+    @abstractmethod
+    def score_samples(self, X: np.ndarray):
+        raise NotImplemented
 
     def _get_test_loader(self, data: np.ndarray):
         prediction_set = BaseDataset(data=data)
@@ -175,6 +235,22 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
     @staticmethod
     def get_mapped_prediction(y: np.ndarray):
         return np.vectorize(lambda x: 0 if x == 1 else 1)(y)
+
+    # noinspection PyPep8Naming
+    def _check_ready_for_prediction(self, X, y=None):
+        check_is_fitted(self)
+        if y is not None:
+            X, y = check_X_y(X, y)
+            y = np.array(y)
+        else:
+            X = check_array(X)
+
+        X = np.array(X)
+
+        if X.shape[1] != self.n_features_in_:
+            raise ValueError('Invalid number of features in data.')
+
+        return X, y
 
     def _more_tags(self):
         return {'binary_only': True}
