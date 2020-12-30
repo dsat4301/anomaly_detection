@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from collections import OrderedDict
 from typing import Sequence
 
@@ -6,7 +7,7 @@ from torch import nn
 
 class BaseModule(nn.Module):
 
-    def __init__(self, size_z: int, n_features: int, bias: bool = True):
+    def __init__(self, size_z: int, n_features: int, bias: bool):
         super(BaseModule, self).__init__()
 
         self.size_z = size_z
@@ -14,32 +15,10 @@ class BaseModule(nn.Module):
         self.bias = bias
 
 
-class EncoderLinear(BaseModule):
-
-    def __init__(self, size_z: int, n_features: int):
-        super(EncoderLinear, self).__init__(size_z, n_features)
-
-        self.linear = nn.Linear(self.n_features, self.size_z, bias=self.bias)
-
-    def forward(self, x):
-        return self.linear(x)
-
-
-class DecoderLinear(BaseModule):
-
-    def __init__(self, size_z: int, n_features: int):
-        super(DecoderLinear, self).__init__(size_z, n_features)
-
-        self.linear = nn.Linear(self.size_z, self.n_features, bias=self.bias)
-
-    def forward(self, x):
-        return self.linear(x)
-
-
 class NonLinearBaseModule(BaseModule):
 
-    def __init__(self, size_z: int, n_features: int, n_hidden_features: Sequence[int]):
-        super(NonLinearBaseModule, self).__init__(size_z, n_features)
+    def __init__(self, size_z: int, n_features: int, n_hidden_features: Sequence[int], bias: bool):
+        super(NonLinearBaseModule, self).__init__(size_z, n_features, bias)
 
         self.n_hidden_features = n_hidden_features
 
@@ -78,11 +57,15 @@ class NonLinearBaseModule(BaseModule):
 
         return blocks
 
+    @abstractmethod
+    def __getitem__(self, item):
+        raise NotImplemented
+
 
 class Encoder(NonLinearBaseModule):
 
-    def __init__(self, size_z: int, n_features: int, n_hidden_features: Sequence[int]):
-        super(Encoder, self).__init__(size_z, n_features, n_hidden_features)
+    def __init__(self, size_z: int, n_features: int, n_hidden_features: Sequence[int], bias: bool):
+        super(Encoder, self).__init__(size_z, n_features, n_hidden_features, bias)
 
         blocks = self.get_blocks(n_hidden_features=self.n_hidden_features,
                                  in_features_first=self.n_features,
@@ -92,11 +75,14 @@ class Encoder(NonLinearBaseModule):
     def forward(self, x):
         return self.model(x)
 
+    def __getitem__(self, item):
+        return self.model[item]
+
 
 class Decoder(NonLinearBaseModule):
 
-    def __init__(self, size_z: int, n_features: int, n_hidden_features: Sequence[int]):
-        super(Decoder, self).__init__(size_z, n_features, n_hidden_features)
+    def __init__(self, size_z: int, n_features: int, n_hidden_features: Sequence[int], bias: bool):
+        super(Decoder, self).__init__(size_z, n_features, n_hidden_features, bias)
 
         self.n_hidden_features_reversed = self.n_hidden_features[::-1]
 
@@ -108,15 +94,19 @@ class Decoder(NonLinearBaseModule):
     def forward(self, x):
         return self.model(x)
 
+    def __getitem__(self, item):
+        return self.model[item]
+
 
 class BaseSubNetwork(BaseModule):
     def __init__(
             self,
             size_z: int,
             n_features: int,
-            linear: bool = True,
-            n_hidden_features: Sequence[int] = None):
-        super(BaseSubNetwork, self).__init__(size_z, n_features)
+            linear: bool,
+            n_hidden_features: Sequence[int],
+            bias: bool):
+        super(BaseSubNetwork, self).__init__(size_z, n_features, bias)
 
         self.linear = linear
         self.n_hidden_features = n_hidden_features
@@ -125,28 +115,44 @@ class BaseSubNetwork(BaseModule):
             assert all(self.size_z < hidden_features < self.n_features
                        for hidden_features in self.n_hidden_features), \
                 'Invalid number of hidden features'
+        else:
+            assert len(self.n_hidden_features) == 1, 'Invalid number of hidden features'
 
     def get_encoder_network(self):
-        return EncoderLinear(self.size_z, self.n_features) if self.linear \
-            else Encoder(self.size_z, self.n_features, self.n_hidden_features)
+        linear_encoder = nn.Sequential(OrderedDict([
+            ('fc1', nn.Linear(self.n_features, self.n_hidden_features[0], bias=self.bias)),
+            ('fc2', nn.Linear(self.n_hidden_features[0], self.size_z, bias=self.bias))
+        ]))
+
+        return linear_encoder \
+            if self.linear \
+            else Encoder(self.size_z, self.n_features, self.n_hidden_features, self.bias)
 
     def get_decoder_network(self):
-        return DecoderLinear(self.size_z, self.n_features) if self.linear \
-            else Decoder(self.size_z, self.n_features, self.n_hidden_features)
+        linear_decoder = nn.Sequential(OrderedDict([
+            ('fc1', nn.Linear(self.size_z, self.n_hidden_features[0], bias=self.bias)),
+            ('fc2', nn.Linear(self.n_hidden_features[0], self.n_features, bias=self.bias))
+        ]))
+
+        return linear_decoder \
+            if self.linear \
+            else Decoder(self.size_z, self.n_features, self.n_hidden_features, self.bias)
 
 
 class DiscriminatorNet(BaseSubNetwork):
+
     def __init__(
             self,
             size_z: int,
             n_features: int,
+            n_hidden_features: Sequence[int],
             linear: bool = True,
-            n_hidden_features: Sequence[int] = None):
-        super(DiscriminatorNet, self).__init__(size_z, n_features, linear, n_hidden_features)
+            bias: bool = True):
+        super(DiscriminatorNet, self).__init__(size_z, n_features, linear, n_hidden_features, bias)
 
-        self.features = self.get_encoder_network()
+        self.features = self.get_encoder_network()[:-1]
         self.classifier = nn.Sequential(OrderedDict([
-            ('linear', nn.Linear(self.size_z, 1)),
+            ('linear', nn.Linear(self.n_hidden_features[-1], 1)),
             ('sigmoid', nn.Sigmoid())
         ]))
 
@@ -163,9 +169,10 @@ class GeneratorNet(BaseSubNetwork):
             self,
             size_z: int,
             n_features: int,
-            linear: bool,
-            n_hidden_features: Sequence[int] = None):
-        super(GeneratorNet, self).__init__(size_z, n_features, linear, n_hidden_features)
+            n_hidden_features: Sequence[int],
+            linear: bool = True,
+            bias: bool = True):
+        super(GeneratorNet, self).__init__(size_z, n_features, linear, n_hidden_features, bias)
 
         self.encoder1 = self.get_encoder_network()
         self.decoder = self.get_decoder_network()
@@ -174,7 +181,7 @@ class GeneratorNet(BaseSubNetwork):
     def forward(self, x):
         latent_input = self.encoder1(x)
         generated_data = self.decoder(latent_input)
-        latent_output = self.encoder2(x)
+        latent_output = self.encoder2(generated_data)
 
         # output autoencoder, output first encoder, output second encoder
         return generated_data, latent_input, latent_output

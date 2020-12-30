@@ -3,23 +3,22 @@ from torch import nn
 
 
 class GANomalyLoss:
+    LOSS_FUNCTION_ADVERSERIAL = nn.MSELoss(reduction='mean')
+    LOSS_FUNCTION_CONTEXTUAL = nn.L1Loss(reduction='mean')
+    LOSS_FUNCTION_ENCODER = nn.MSELoss(reduction='mean')
+    LOSS_FUNCTION_BCE = nn.BCELoss(reduction='mean')
 
     def __init__(
             self,
-            device: str,
+            device: str = 'cpu',
             weight_adverserial_loss: float = 1,
             weight_contextual_loss: float = 1,
             weight_encoder_loss=1):
-        self.device = device
 
+        self.device = device
         self.weight_adverserial_loss = weight_adverserial_loss
         self.weight_contextual_loss = weight_contextual_loss
         self.weight_encoder_loss = weight_encoder_loss
-
-        self.loss_function_adverserial = nn.MSELoss(reduction='mean')
-        self.loss_function_contextual = nn.L1Loss(reduction='mean')
-        self.loss_function_encoder = nn.MSELoss(reduction='mean')
-        self.loss_function_bce = nn.BCELoss(reduction='mean')
 
         self.adverserial_loss_epoch = 0
         self.contextual_loss_epoch = 0
@@ -34,8 +33,8 @@ class GANomalyLoss:
         labels_real = torch.zeros(size=classifier_real.size(), device=self.device)
         labels_fake = torch.ones(size=classifier_fake.size(), device=self.device)
 
-        loss_real = self.loss_function_bce(classifier_real, labels_real)
-        loss_fake = self.loss_function_bce(classifier_fake, labels_fake)
+        loss_real = self.LOSS_FUNCTION_BCE(classifier_real, labels_real)
+        loss_fake = self.LOSS_FUNCTION_BCE(classifier_fake, labels_fake)
 
         discriminator_loss = (loss_real + loss_fake) * 0.5
         self.discriminator_loss_epoch = (self.discriminator_loss_epoch + discriminator_loss) * 0.5
@@ -50,9 +49,9 @@ class GANomalyLoss:
             features_fake: torch.Tensor):
         generated_data, latent_input, latent_output = generator_output
 
-        adverserial_loss = self.loss_function_adverserial(features_real, features_fake)
-        contextual_loss = self.loss_function_contextual(inputs, generated_data)
-        encoder_loss = self.loss_function_encoder(latent_input, latent_output)
+        adverserial_loss = self.LOSS_FUNCTION_ADVERSERIAL(features_real, features_fake)
+        contextual_loss = self.LOSS_FUNCTION_CONTEXTUAL(inputs, generated_data)
+        encoder_loss = self.LOSS_FUNCTION_ENCODER(latent_input, latent_output)
 
         generator_loss = \
             self.weight_adverserial_loss * adverserial_loss \

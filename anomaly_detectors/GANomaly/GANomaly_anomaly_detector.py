@@ -1,10 +1,10 @@
+import math
 from collections import OrderedDict
 from typing import Tuple, Sequence, Callable
 
 import mlflow
 import numpy as np
 import torch
-from base_networks import GeneratorNet
 from sklearn.metrics import make_scorer, average_precision_score
 from torch import optim
 # noinspection PyProtectedMember
@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 from anomaly_detectors.GANomaly.GANomaly_loss import GANomalyLoss
 from base.base_anomaly_detector import BaseAnomalyDetector
-from base.base_networks import DiscriminatorNet
+from base.base_networks import GeneratorNet, DiscriminatorNet
 
 
 class GANomalyAnomalyDetector(BaseAnomalyDetector):
@@ -127,18 +127,20 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
         return np.array(scores)
 
     def _initialize_fitting(self, train_loader: DataLoader):
+        n_hidden_features_fallback = [self.n_features_in_ - math.floor((self.n_features_in_ - self.size_z) / 2)]
+
         if self.random_state is not None:
             torch.manual_seed(self.random_state)
         self.generator_net_ = GeneratorNet(
             self.size_z,
             self.n_features_in_,
-            self.linear,
-            self.n_hidden_features).to(self.device)
+            self.n_hidden_features if self.n_hidden_features is not None else n_hidden_features_fallback,
+            self.linear).to(self.device)
         self.discriminator_net_ = DiscriminatorNet(
             self.size_z,
             self.n_features_in_,
-            self.linear,
-            self.n_hidden_features).to(self.device)
+            self.n_hidden_features if self.n_hidden_features is not None else n_hidden_features_fallback,
+            self.linear).to(self.device)
         self.optimizer_generator_ = optim.Adam(
             params=self.generator_net_.parameters(),
             lr=self.learning_rate,

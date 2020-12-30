@@ -1,33 +1,17 @@
-import unittest
-
 from parameterized import parameterized
-from sklearn.utils.estimator_checks import check_estimator
 
 from anomaly_detectors.GANomaly.GANomaly_anomaly_detector import GANomalyAnomalyDetector
-from testing_base.customized_estimator_checks import check_outliers_train, check_outliers_fit_predict
+from testing_base.base_anomaly_detector_tests import BaseAnomalyDetectorTests
+from testing_base.testing_helpers import get_estimator_checks
 
 
-class GANomalyAnomalyDetectorTests(unittest.TestCase):
-    EXCLUDED_SCIKIT_LEARN_ESTIMATOR_TESTS = ['check_outliers_train', 'check_outliers_fit_predict']
+class GANomalyAnomalyDetectorTests(BaseAnomalyDetectorTests):
+    checks = get_estimator_checks(GANomalyAnomalyDetector())
 
-    checks = []
-    estimator_checks = check_estimator(GANomalyAnomalyDetector(), generate_only=True)
-
-    for estimator, check in estimator_checks:
-        name = str(check.func.__name__)
-        if name not in EXCLUDED_SCIKIT_LEARN_ESTIMATOR_TESTS:
-            checks.append((name, estimator, check))
+    @property
+    def sut(self):
+        return GANomalyAnomalyDetector()
 
     @parameterized.expand(checks)
     def test_scikit_learn_estimator(self, name, estimator, check):
         check(estimator)
-
-    @staticmethod
-    def test_check_outliers_train():
-        sut = GANomalyAnomalyDetector()
-        check_outliers_train(sut)
-
-    @staticmethod
-    def test_check_outliers_fit_predict():
-        sut = GANomalyAnomalyDetector()
-        check_outliers_fit_predict(sut)

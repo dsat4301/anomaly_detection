@@ -4,14 +4,14 @@ from typing import Callable, Sequence
 import mlflow
 import numpy as np
 import torch
-from base_networks import EncoderLinear, Encoder
 from sklearn.metrics import make_scorer, average_precision_score
 from sklearn.utils.validation import check_is_fitted, check_array
-from torch import optim
+from torch import optim, nn
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
 from base.base_anomaly_detector import BaseAnomalyDetector
+from base.base_networks import Encoder
 
 
 class SVDDAnomalyDetector(BaseAnomalyDetector):
@@ -104,9 +104,9 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
         if self.random_state is not None:
             torch.manual_seed(self.random_state)
 
-        self.network_ = EncoderLinear(self.latent_dimensions, self.n_features_in_) \
+        self.network_ = nn.Sequential(nn.Linear(self.n_features_in_, self.latent_dimensions, bias=False)) \
             if self.linear \
-            else Encoder(self.latent_dimensions, self.n_features_in_, self.n_hidden_features)
+            else Encoder(self.latent_dimensions, self.n_features_in_, self.n_hidden_features, bias=False)
 
         self.network_.to(self.device)
 
