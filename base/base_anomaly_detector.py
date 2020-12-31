@@ -234,7 +234,7 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
 
     @staticmethod
     def get_mapped_prediction(y: np.ndarray):
-        return np.vectorize(lambda x: 0 if x == 1 else 1)(y)
+        return np.vectorize(lambda x: 0 if x == -1 else 1)(y)
 
     # noinspection PyPep8Naming
     def _check_ready_for_prediction(self, X, y=None):
