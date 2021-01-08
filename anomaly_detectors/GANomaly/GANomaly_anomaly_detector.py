@@ -5,7 +5,7 @@ from typing import Tuple, Sequence, Callable
 import mlflow
 import numpy as np
 import torch
-from sklearn.metrics import make_scorer, average_precision_score
+from sklearn.metrics import make_scorer, roc_auc_score
 from torch import optim
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
@@ -76,7 +76,7 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
             linear: bool = True,
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
-            scorer: Callable = make_scorer(average_precision_score, needs_threshold=True)):
+            scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True)):
         super().__init__(
             batch_size=batch_size,
             n_jobs_dataloader=n_jobs_dataloader,
