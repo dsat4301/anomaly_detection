@@ -1,8 +1,9 @@
 from abc import abstractmethod
 from collections import OrderedDict
-from typing import Sequence
+from typing import Sequence, Optional
 
 from torch import nn
+from torch.nn import Module
 
 
 class BaseModule(nn.Module):
@@ -97,6 +98,9 @@ class Decoder(NonLinearBaseModule):
     def __getitem__(self, item):
         return self.model[item]
 
+    def add_module(self, name: str, module: Optional['Module']) -> None:
+        self.model.add_module(name, module)
+
 
 class BaseSubNetwork(BaseModule):
     def __init__(
@@ -185,3 +189,26 @@ class GeneratorNet(BaseSubNetwork):
 
         # output autoencoder, output first encoder, output second encoder
         return generated_data, latent_input, latent_output
+
+
+class MultivariateGaussianEncoder(BaseSubNetwork):
+    def __init__(
+            self,
+            size_z: int,
+            n_features: int,
+            n_hidden_features: Sequence[int],
+            linear: bool = True,
+            bias: bool = True):
+        super(MultivariateGaussianEncoder, self).__init__(size_z, n_features, linear, n_hidden_features, bias)
+
+        self.encoder = self.get_encoder_network()[:-1]
+        self.fc_mean = nn.Linear(in_features=self.n_hidden_features[-1], out_features=self.size_z, bias=self.bias)
+        self.fc_variance =\
+            nn.Linear(in_features=self.n_hidden_features[-1], out_features=self.size_z, bias=self.bias)
+
+    def forward(self, x):
+        encoder_output = self.encoder(x)
+        mean = self.fc_mean(encoder_output)
+        log_variance = self.fc_variance(encoder_output)
+
+        return mean, log_variance

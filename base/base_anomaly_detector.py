@@ -56,7 +56,8 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
             linear: bool,
             n_hidden_features: Sequence[int],
             random_state: int,
-            novelty: bool):
+            novelty: bool,
+            latent_dimensions: int):
 
         self.batch_size = batch_size
         self.n_jobs_dataloader = n_jobs_dataloader
@@ -68,6 +69,7 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
         self.n_hidden_features = n_hidden_features
         self.random_state = random_state
         self.novelty = novelty
+        self.latent_dimensions = latent_dimensions
 
     @property
     @abstractmethod

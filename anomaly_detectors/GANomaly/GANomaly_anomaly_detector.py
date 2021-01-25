@@ -68,7 +68,7 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
             batch_size: int = 256,
             n_jobs_dataloader: int = 4,
             learning_rate: float = 0.0001,
-            size_z: int = 2,
+            latent_dimensions: int = 2,
             weight_adverserial_loss: float = 1,
             weight_contextual_loss: float = 50,
             weight_encoder_loss=1,
@@ -76,7 +76,8 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
             linear: bool = True,
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
-            scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True)):
+            scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True),
+            softmax_for_final_decoder_layer: bool = False):
         super().__init__(
             batch_size=batch_size,
             n_jobs_dataloader=n_jobs_dataloader,
@@ -87,13 +88,14 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
             linear=linear,
             n_hidden_features=n_hidden_features,
             random_state=random_state,
-            novelty=True)
+            novelty=True,
+            latent_dimensions=latent_dimensions)
 
-        self.size_z = size_z
         self.weight_adverserial_loss = weight_adverserial_loss
         self.weight_contextual_loss = weight_contextual_loss
         self.weight_encoder_loss = weight_encoder_loss
         self.optimizer_betas = optimizer_betas
+        self.softmax_for_final_decoder_layer = softmax_for_final_decoder_layer
 
     # noinspection PyPep8Naming
     def score_samples(self, X: np.ndarray):
@@ -127,20 +129,28 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
         return np.array(scores)
 
     def _initialize_fitting(self, train_loader: DataLoader):
-        n_hidden_features_fallback = [self.n_features_in_ - math.floor((self.n_features_in_ - self.size_z) / 2)]
+        print(self.n_features_in_)
+        print(self.latent_dimensions)
+
+        n_hidden_features_fallback =\
+            [self.n_features_in_ - math.floor((self.n_features_in_ - self.latent_dimensions) / 2)]
 
         if self.random_state is not None:
             torch.manual_seed(self.random_state)
         self.generator_net_ = GeneratorNet(
-            self.size_z,
+            self.latent_dimensions,
             self.n_features_in_,
             self.n_hidden_features if self.n_hidden_features is not None else n_hidden_features_fallback,
             self.linear).to(self.device)
         self.discriminator_net_ = DiscriminatorNet(
-            self.size_z,
+            self.latent_dimensions,
             self.n_features_in_,
             self.n_hidden_features if self.n_hidden_features is not None else n_hidden_features_fallback,
             self.linear).to(self.device)
+
+        if self.softmax_for_final_decoder_layer:
+            self.generator_net_.decoder.add_module('softmax', torch.nn.Softmax(dim=1))
+
         self.optimizer_generator_ = optim.Adam(
             params=self.generator_net_.parameters(),
             lr=self.learning_rate,

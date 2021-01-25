@@ -8,8 +8,7 @@ from testing_base.testing_helpers import get_estimator_checks
 class GANomalyAnomalyDetectorTests(BaseAnomalyDetectorTests):
     checks = get_estimator_checks(GANomalyAnomalyDetector())
 
-    @property
-    def sut(self):
+    def create_sut(self):
         return GANomalyAnomalyDetector()
 
     @parameterized.expand(checks)

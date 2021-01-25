@@ -4,7 +4,7 @@ from typing import Callable, Sequence
 import mlflow
 import numpy as np
 import torch
-from sklearn.metrics import make_scorer, average_precision_score
+from sklearn.metrics import make_scorer, roc_auc_score
 from sklearn.utils.validation import check_is_fitted, check_array
 from torch import optim, nn
 # noinspection PyProtectedMember
@@ -29,7 +29,7 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
             linear: bool = True,
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
-            scorer: Callable = make_scorer(average_precision_score, needs_threshold=True)):
+            scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True)):
 
         super().__init__(
             batch_size=batch_size,
@@ -41,11 +41,11 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
             linear=linear,
             n_hidden_features=n_hidden_features,
             random_state=random_state,
-            novelty=True)
+            novelty=True,
+            latent_dimensions=latent_dimensions)
 
         self.optimizer_name = optimizer_name
         self.weight_decay = weight_decay
-        self.latent_dimensions = latent_dimensions
 
     @property
     def offset_(self):

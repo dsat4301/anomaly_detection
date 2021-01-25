@@ -9,8 +9,7 @@ class SVDDAnomalyDetectorTests(BaseAnomalyDetectorTests):
 
     checks = get_estimator_checks(SVDDAnomalyDetector())
 
-    @property
-    def sut(self):
+    def create_sut(self):
         return SVDDAnomalyDetector()
 
     @parameterized.expand(checks)
