@@ -37,13 +37,14 @@ def get_displot(
         scores_data_frame: pd.DataFrame,
         filter_condition: Collection[bool],
         hue: str = None,
-        anomaly_score_label: str = 'anomaly_score'):
+        anomaly_score_label: str = 'anomaly_score',
+        log_scale: bool = True):
     return sns.displot(
         data=scores_data_frame.loc[filter_condition],
         x=anomaly_score_label,
         hue=hue,
         kind='kde',
-        log_scale=True,
+        log_scale=log_scale,
         height=10,
         rug=True)
 
@@ -72,7 +73,8 @@ def get_visualizations(
         filter_condition: Collection[bool],
         threshold: float,
         anomaly_class_label: str = 'anomaly',
-        anomaly_score_label: str = 'anomaly_score') -> Collection[Tuple[str, SaveableFigure]]:
+        anomaly_score_label: str = 'anomaly_score',
+        log_scale: bool = True) -> Collection[Tuple[str, SaveableFigure]]:
     boxplot = get_boxplot(
         scores_data_frame=test_scores,
         filter_condition=filter_condition,
@@ -82,7 +84,8 @@ def get_visualizations(
         scores_data_frame=test_scores,
         filter_condition=filter_condition,
         anomaly_score_label=anomaly_score_label,
-        hue=anomaly_class_label)
+        hue=anomaly_class_label,
+        log_scale=log_scale)
     cm = get_confusion_matrix(
         scores_data_frame=test_scores,
         threshold=threshold,

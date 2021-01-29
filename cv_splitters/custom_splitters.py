@@ -16,6 +16,7 @@ class LeaveOutOneClassForTrainingCrossValidator(BaseCrossValidator):
         self.shuffle = shuffle
         self.random_state = random_state
 
+    # noinspection PyPep8Naming
     def get_n_splits(self, X=None, y=None, groups=None):
         if y is None:
             raise ValueError
@@ -27,6 +28,7 @@ class LeaveOutOneClassForTrainingCrossValidator(BaseCrossValidator):
 
         return math.floor(n_training_samples / fold_size)
 
+    # noinspection PyPep8Naming
     def _iter_test_indices(self, X=None, y=None, groups=None):
         if y is None:
             raise ValueError

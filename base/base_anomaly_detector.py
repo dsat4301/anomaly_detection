@@ -5,12 +5,13 @@ from typing import Sequence, Callable
 import mlflow
 import numpy as np
 import torch
-from util.data import BaseDataset
 from sklearn.base import BaseEstimator, OutlierMixin
 from sklearn.utils import check_X_y, check_array
 from sklearn.utils.validation import check_is_fitted
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
+
+from util.data import BaseDataset
 
 
 class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
@@ -238,6 +239,9 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
     def get_mapped_prediction(y: np.ndarray):
         return np.vectorize(lambda x: 0 if x == -1 else 1)(y)
 
+    def _more_tags(self):
+        return {'binary_only': True}
+
     # noinspection PyPep8Naming
     def _check_ready_for_prediction(self, X, y=None):
         check_is_fitted(self)
@@ -246,13 +250,7 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
             y = np.array(y)
         else:
             X = check_array(X)
-
         X = np.array(X)
-
         if X.shape[1] != self.n_features_in_:
             raise ValueError('Invalid number of features in data.')
-
         return X, y
-
-    def _more_tags(self):
-        return {'binary_only': True}

@@ -6,20 +6,19 @@ import mlflow
 import numpy as np
 import torch
 from sklearn.metrics import make_scorer, roc_auc_score
-from sklearn.utils import check_array
-from sklearn.utils.validation import check_is_fitted
 from torch import nn
 from torch import optim
 from torch.distributions import MultivariateNormal
-from torch.nn import MSELoss
+# noinspection PyProtectedMember
+from torch.nn.modules.loss import _Loss, MSELoss
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
-from base.base_anomaly_detector import BaseAnomalyDetector
+from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector
 from base.base_networks import MultivariateGaussianEncoder, Decoder
 
 
-class VAEAnomalyDetector(BaseAnomalyDetector):
+class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
     def __init__(
             self,
             batch_size: int = 128,
@@ -33,7 +32,8 @@ class VAEAnomalyDetector(BaseAnomalyDetector):
             random_state: int = None,
             latent_dimensions: int = 2,
             n_drawings_distributions: int = 1,
-            softmax_for_final_decoder_layer: bool = False):
+            softmax_for_final_decoder_layer: bool = False,
+            reconstruction_loss_function: _Loss = MSELoss(reduction='none')):
         super().__init__(
             batch_size,
             n_jobs_dataloader,
@@ -45,10 +45,11 @@ class VAEAnomalyDetector(BaseAnomalyDetector):
             n_hidden_features,
             random_state,
             novelty=True,
-            latent_dimensions=latent_dimensions)
+            latent_dimensions=latent_dimensions,
+            softmax_for_final_decoder_layer=softmax_for_final_decoder_layer,
+            reconstruction_loss_function=reconstruction_loss_function)
 
         self.n_drawings_distributions = n_drawings_distributions
-        self.softmax_for_final_decoder_layer = softmax_for_final_decoder_layer
 
     @property
     def offset_(self):
@@ -67,11 +68,7 @@ class VAEAnomalyDetector(BaseAnomalyDetector):
 
     # noinspection PyPep8Naming
     def score_samples(self, X: np.ndarray):
-        check_is_fitted(self)
-        X = check_array(X, estimator=self)
-        # noinspection PyUnresolvedReferences
-        if X.shape[1] != self.n_features_in_:
-            raise ValueError('Invalid number of features in data.')
+        X, _ = self._check_ready_for_prediction(X)
 
         # noinspection PyTypeChecker
         loader = self._get_test_loader(X)
@@ -90,7 +87,7 @@ class VAEAnomalyDetector(BaseAnomalyDetector):
                     log_variance_encoder.repeat_interleave(self.n_drawings_distributions, dim=0))
 
                 reconstructed_samples = self.decoder_network_(z)
-                expected_reconstruction_loss = self.mse_loss_(
+                expected_reconstruction_loss = self.reconstruction_loss_function(
                     inputs.repeat_interleave(self.n_drawings_distributions, dim=0),
                     reconstructed_samples).mean(axis=1)
 
@@ -122,7 +119,6 @@ class VAEAnomalyDetector(BaseAnomalyDetector):
         if self.softmax_for_final_decoder_layer:
             self.decoder_network_.add_module('softmax', nn.Softmax(dim=1))
 
-        self.mse_loss_ = MSELoss(reduction='none')
         self.loss_ = 0
         self.optimizer_ = optim.Adam(
             list(self.encoder_network_.parameters()) + list(self.decoder_network_.parameters()),
@@ -139,7 +135,7 @@ class VAEAnomalyDetector(BaseAnomalyDetector):
 
         reconstructed = self.decoder_network_(z)
         inputs_expected = inputs.repeat_interleave(self.n_drawings_distributions, dim=0)
-        expected_reconstruction_error = self.mse_loss_(inputs_expected, reconstructed).mean()
+        expected_reconstruction_error = self.reconstruction_loss_function(inputs_expected, reconstructed).mean()
 
         self.loss_ = kl_divergence + expected_reconstruction_error
 

@@ -5,7 +5,6 @@ import mlflow
 import numpy as np
 import torch
 from sklearn.metrics import make_scorer, roc_auc_score
-from sklearn.utils.validation import check_is_fitted, check_array
 from torch import optim, nn
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
@@ -77,11 +76,7 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
             Array with positive scores with higher values indicating higher probability of the
             sample beeing an anomaly.
         """
-        check_is_fitted(self)
-        X = check_array(X, estimator=self)
-        # noinspection PyUnresolvedReferences
-        if X.shape[1] != self.n_features_in_:
-            raise ValueError('Invalid number of features in data.')
+        X, _ = self._check_ready_for_prediction(X)
 
         # noinspection PyTypeChecker
         loader = self._get_test_loader(X)

@@ -1,10 +1,11 @@
 import torch
 from torch import nn
+# noinspection PyProtectedMember
+from torch.nn.modules.loss import _Loss, MSELoss
 
 
 class GANomalyLoss:
     LOSS_FUNCTION_ADVERSERIAL = nn.MSELoss(reduction='mean')
-    LOSS_FUNCTION_CONTEXTUAL = nn.L1Loss(reduction='mean')
     LOSS_FUNCTION_ENCODER = nn.MSELoss(reduction='mean')
     LOSS_FUNCTION_BCE = nn.BCELoss(reduction='mean')
 
@@ -13,12 +14,14 @@ class GANomalyLoss:
             device: str = 'cpu',
             weight_adverserial_loss: float = 1,
             weight_contextual_loss: float = 1,
-            weight_encoder_loss=1):
+            weight_encoder_loss: float = 1,
+            reconstruction_loss_function: _Loss = MSELoss(reduction='mean')):
 
         self.device = device
         self.weight_adverserial_loss = weight_adverserial_loss
         self.weight_contextual_loss = weight_contextual_loss
         self.weight_encoder_loss = weight_encoder_loss
+        self.loss_function_contextual = reconstruction_loss_function
 
         self.adverserial_loss_epoch = 0
         self.contextual_loss_epoch = 0
@@ -50,7 +53,7 @@ class GANomalyLoss:
         generated_data, latent_input, latent_output = generator_output
 
         adverserial_loss = self.LOSS_FUNCTION_ADVERSERIAL(features_real, features_fake)
-        contextual_loss = self.LOSS_FUNCTION_CONTEXTUAL(inputs, generated_data)
+        contextual_loss = self.loss_function_contextual(inputs, generated_data)
         encoder_loss = self.LOSS_FUNCTION_ENCODER(latent_input, latent_output)
 
         generator_loss = \

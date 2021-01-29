@@ -8,14 +8,16 @@ import torch
 from sklearn.metrics import make_scorer, roc_auc_score
 from torch import optim
 # noinspection PyProtectedMember
+from torch.nn.modules.loss import _Loss, MSELoss
+# noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
 from anomaly_detectors.GANomaly.GANomaly_loss import GANomalyLoss
-from base.base_anomaly_detector import BaseAnomalyDetector
+from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector
 from base.base_networks import GeneratorNet, DiscriminatorNet
 
 
-class GANomalyAnomalyDetector(BaseAnomalyDetector):
+class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
     """Semi-Supervised Anomaly Detection via Adversarial Training.
 
     Classification of samples as anomaly or normal data based on GANomaly architecture
@@ -77,7 +79,8 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
             scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True),
-            softmax_for_final_decoder_layer: bool = False):
+            softmax_for_final_decoder_layer: bool = False,
+            reconstruction_loss_function: _Loss = MSELoss(reduction='mean')):
         super().__init__(
             batch_size=batch_size,
             n_jobs_dataloader=n_jobs_dataloader,
@@ -89,13 +92,14 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
             n_hidden_features=n_hidden_features,
             random_state=random_state,
             novelty=True,
-            latent_dimensions=latent_dimensions)
+            latent_dimensions=latent_dimensions,
+            softmax_for_final_decoder_layer=softmax_for_final_decoder_layer,
+            reconstruction_loss_function=reconstruction_loss_function)
 
         self.weight_adverserial_loss = weight_adverserial_loss
         self.weight_contextual_loss = weight_contextual_loss
         self.weight_encoder_loss = weight_encoder_loss
         self.optimizer_betas = optimizer_betas
-        self.softmax_for_final_decoder_layer = softmax_for_final_decoder_layer
 
     # noinspection PyPep8Naming
     def score_samples(self, X: np.ndarray):
@@ -129,8 +133,6 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
         return np.array(scores)
 
     def _initialize_fitting(self, train_loader: DataLoader):
-        print(self.n_features_in_)
-        print(self.latent_dimensions)
 
         n_hidden_features_fallback =\
             [self.n_features_in_ - math.floor((self.n_features_in_ - self.latent_dimensions) / 2)]
@@ -163,7 +165,8 @@ class GANomalyAnomalyDetector(BaseAnomalyDetector):
             device=self.device,
             weight_adverserial_loss=self.weight_adverserial_loss,
             weight_contextual_loss=self.weight_contextual_loss,
-            weight_encoder_loss=self.weight_encoder_loss)
+            weight_encoder_loss=self.weight_encoder_loss,
+            reconstruction_loss_function=self.reconstruction_loss_function)
         self._offset_ = 0
 
     def _optimize_params(self, inputs: torch.Tensor):

@@ -17,7 +17,9 @@ class ChiSquareLoss(_Loss):
         sums = input + target
         squared_differences = (input - target).pow(2)
 
-        result = (squared_differences / (sums + self.alpha)).abs()
+        result = squared_differences / (sums + self.alpha)
+
+        assert (result >= 0).all()
 
         if self.reduction == 'none':
             return result
