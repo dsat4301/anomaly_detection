@@ -9,11 +9,11 @@ from torch import optim, nn
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
-from base.base_anomaly_detector import BaseAnomalyDetector
+from base.base_nn_anomaly_detector import BaseNNAnomalyDetector
 from base.base_networks import Encoder
 
 
-class SVDDAnomalyDetector(BaseAnomalyDetector):
+class SVDDNNAnomalyDetector(BaseNNAnomalyDetector):
 
     def __init__(
             self,
@@ -48,12 +48,12 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
 
     @property
     def offset_(self):
-        return self._offset_
+        return self.__offset_
 
     @offset_.setter
     def offset_(self, value: float):
         # noinspection PyAttributeOutsideInit
-        self._offset_ = value
+        self.__offset_ = value
 
     @property
     def _networks(self) -> Sequence[torch.nn.Module]:
@@ -114,7 +114,7 @@ class SVDDAnomalyDetector(BaseAnomalyDetector):
 
         self.c_ = self._get_initial_center_c(train_loader)
         self.loss_ = 0
-        self._offset_ = 0
+        self.__offset_ = 0
 
     def _get_initial_center_c(self, train_loader: DataLoader, eps=0.1):
         """Initialize hypersphere center c as the mean from an initial forward pass on the data."""

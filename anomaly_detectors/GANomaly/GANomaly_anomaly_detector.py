@@ -13,11 +13,11 @@ from torch.nn.modules.loss import _Loss, MSELoss
 from torch.utils.data import DataLoader
 
 from anomaly_detectors.GANomaly.GANomaly_loss import GANomalyLoss
-from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector
+from base.base_generative_anomaly_detector import BaseGenerativeNNAnomalyDetector
 from base.base_networks import GeneratorNet, DiscriminatorNet
 
 
-class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
+class GANomalyAnomalyDetector(BaseGenerativeNNAnomalyDetector):
     """Semi-Supervised Anomaly Detection via Adversarial Training.
 
     Classification of samples as anomaly or normal data based on GANomaly architecture

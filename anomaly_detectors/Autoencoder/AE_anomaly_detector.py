@@ -12,11 +12,11 @@ from torch.nn.modules.loss import _Loss
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
-from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector
+from base.base_generative_anomaly_detector import BaseGenerativeNNAnomalyDetector
 from base.base_networks import Encoder, Decoder
 
 
-class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
+class AEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
     PRECISION = 5
 
     def __init__(

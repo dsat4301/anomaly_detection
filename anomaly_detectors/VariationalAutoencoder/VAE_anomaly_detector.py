@@ -14,11 +14,11 @@ from torch.nn.modules.loss import _Loss, MSELoss
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
-from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector
+from base.base_generative_anomaly_detector import BaseGenerativeNNAnomalyDetector
 from base.base_networks import MultivariateGaussianEncoder, Decoder
 
 
-class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
+class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
     def __init__(
             self,
             batch_size: int = 128,

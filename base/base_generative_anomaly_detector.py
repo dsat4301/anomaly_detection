@@ -9,10 +9,10 @@ from torch.nn.modules.loss import _Loss
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
-from base.base_anomaly_detector import BaseAnomalyDetector
+from base.base_nn_anomaly_detector import BaseNNAnomalyDetector
 
 
-class BaseGenerativeAnomalyDetector(BaseAnomalyDetector):
+class BaseGenerativeNNAnomalyDetector(BaseNNAnomalyDetector):
     def __init__(
             self,
             batch_size: int,
