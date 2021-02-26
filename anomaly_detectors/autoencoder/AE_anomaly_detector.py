@@ -4,7 +4,6 @@ from typing import Callable, Sequence
 import mlflow
 import numpy as np
 import torch
-from sklearn.metrics import make_scorer, roc_auc_score
 from torch import nn, optim
 from torch.nn import Softmax
 # noinspection PyProtectedMember
@@ -12,11 +11,11 @@ from torch.nn.modules.loss import _Loss
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
-from base.base_generative_anomaly_detector import BaseGenerativeNNAnomalyDetector
+from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector
 from base.base_networks import Encoder, Decoder
 
 
-class AEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
+class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
     PRECISION = 5
 
     def __init__(
@@ -25,14 +24,14 @@ class AEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
             n_jobs_dataloader: int = 4,
             n_epochs: int = 10,
             device: str = 'cpu',
-            scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True),
+            scorer: Callable = None,
             learning_rate: float = 1e-4,
             linear: bool = True,
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
             latent_dimensions: int = 2,
             softmax_for_final_decoder_layer: bool = False,
-            reconstruction_loss_function: _Loss = nn.MSELoss(reduction='none')):
+            reconstruction_loss_function: _Loss = None):
         super().__init__(
             batch_size,
             n_jobs_dataloader,
@@ -45,9 +44,14 @@ class AEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
             random_state,
             novelty=True,
             latent_dimensions=latent_dimensions,
-            reconstruction_loss_function=reconstruction_loss_function)
+            reconstruction_loss_function=reconstruction_loss_function,
+            softmax_for_final_decoder_layer=softmax_for_final_decoder_layer)
 
         self.softmax_for_final_decoder_layer = softmax_for_final_decoder_layer
+
+        if self.reconstruction_loss_function is not None \
+                and self.reconstruction_loss_function.reduction != 'none':
+            raise ValueError('Loss with reduction none required.')
 
     @property
     def offset_(self):
@@ -78,7 +82,11 @@ class AEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
         with torch.no_grad():
             for inputs in loader:
                 reconstructed = self.decoder_network_(self.encoder_network_(inputs))
-                anomaly_scores = self.reconstruction_loss_function(inputs, reconstructed).mean(axis=1)
+
+                anomaly_scores = self.reconstruction_loss_function(inputs, reconstructed).mean(axis=1) \
+                    if self.reconstruction_loss_function is not None \
+                    else nn.MSELoss(reduction='none')(inputs, reconstructed).mean(axis=1)
+
                 scores += anomaly_scores.cpu().data.numpy().tolist()
 
         return np.array(scores).round(self.PRECISION)
@@ -108,7 +116,9 @@ class AEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
         self.optimizer_.zero_grad()
 
         reconstructed = self.decoder_network_(self.encoder_network_(inputs))
-        self.loss_ = self.reconstruction_loss_function(inputs, reconstructed).mean()
+        self.loss_ = self.reconstruction_loss_function(inputs, reconstructed).mean() \
+            if self.reconstruction_loss_function is not None \
+            else nn.MSELoss(reduction='mean')(inputs, reconstructed)
 
         self.loss_.backward()
         self.optimizer_.step()

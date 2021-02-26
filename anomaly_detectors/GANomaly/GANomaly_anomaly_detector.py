@@ -5,19 +5,18 @@ from typing import Tuple, Sequence, Callable
 import mlflow
 import numpy as np
 import torch
-from sklearn.metrics import make_scorer, roc_auc_score
 from torch import optim
 # noinspection PyProtectedMember
-from torch.nn.modules.loss import _Loss, MSELoss
+from torch.nn.modules.loss import _Loss
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
 from anomaly_detectors.GANomaly.GANomaly_loss import GANomalyLoss
-from base.base_generative_anomaly_detector import BaseGenerativeNNAnomalyDetector
+from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector
 from base.base_networks import GeneratorNet, DiscriminatorNet
 
 
-class GANomalyAnomalyDetector(BaseGenerativeNNAnomalyDetector):
+class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
     """Semi-Supervised Anomaly Detection via Adversarial Training.
 
     Classification of samples as anomaly or normal data based on GANomaly architecture
@@ -78,9 +77,9 @@ class GANomalyAnomalyDetector(BaseGenerativeNNAnomalyDetector):
             linear: bool = True,
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
-            scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True),
+            scorer: Callable = None,
             softmax_for_final_decoder_layer: bool = False,
-            reconstruction_loss_function: _Loss = MSELoss(reduction='mean')):
+            reconstruction_loss_function: _Loss = None):
         super().__init__(
             batch_size=batch_size,
             n_jobs_dataloader=n_jobs_dataloader,
@@ -100,6 +99,10 @@ class GANomalyAnomalyDetector(BaseGenerativeNNAnomalyDetector):
         self.weight_contextual_loss = weight_contextual_loss
         self.weight_encoder_loss = weight_encoder_loss
         self.optimizer_betas = optimizer_betas
+
+        if self.reconstruction_loss_function is not None \
+                and self.reconstruction_loss_function.reduction != 'mean':
+            raise ValueError('Loss with reduction mean required.')
 
     # noinspection PyPep8Naming
     def score_samples(self, X: np.ndarray):
@@ -200,7 +203,7 @@ class GANomalyAnomalyDetector(BaseGenerativeNNAnomalyDetector):
                 ('Training time', epoch_train_time),
                 ('Adverserial loss', self.loss_.adverserial_loss_epoch.item()),
                 ('Contextual loss', self.loss_.contextual_loss_epoch.item()),
-                ('EncoderLinear loss', self.loss_.encoder_loss_epoch.item()),
+                ('Encoder loss', self.loss_.encoder_loss_epoch.item()),
                 ('Generator loss', self.loss_.generator_loss_epoch.item()),
                 ('Discriminator loss', self.loss_.discriminator_loss_epoch.item())]))
         print(f'Epoch {epoch}/{self.n_epochs},'

@@ -35,9 +35,9 @@ class LeaveOutOneClassForTrainingCrossValidator(BaseCrossValidator):
         y = np.array(y)
 
         leave_out_indices = np.argwhere(y == self.leave_out_class_label).flatten()
-        fold_size = len(leave_out_indices)
+        leave_out_fold_size = len(leave_out_indices)
         n_training_samples = len(y) - len(leave_out_indices)
-        n_splits = math.floor(n_training_samples / fold_size)
+        n_splits = math.floor(n_training_samples / leave_out_fold_size)
 
         mask = np.ones(len(y), np.bool)
         mask[leave_out_indices] = 0
@@ -46,8 +46,10 @@ class LeaveOutOneClassForTrainingCrossValidator(BaseCrossValidator):
         if self.shuffle:
             check_random_state(self.random_state).shuffle(indices)
 
-        fold_sizes = np.full(n_splits, fold_size, dtype=np.int)
+        fold_sizes = np.full(n_splits, n_training_samples // n_splits, dtype=np.int)
         fold_sizes[:n_training_samples % n_splits] += 1
+
+        assert fold_sizes.sum() == n_training_samples
 
         current = 0
         for fold_size in fold_sizes:

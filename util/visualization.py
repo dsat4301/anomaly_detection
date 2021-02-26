@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 import mlflow
 import pandas as pd
 import seaborn as sns
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score
 
 from util.cf_matrix import make_confusion_matrix
+import numpy as np
 
 
 # noinspection SpellCheckingInspection
@@ -108,8 +109,12 @@ def log_visualizations(
     with mlflow.start_run(run_id=run_id):
         for name_figure_tuple in figures:
             file_name = base_path + name_figure_tuple[0] + '.png'
-            name_figure_tuple[1].savefig(file_name, bbox_inches="tight")
+            save_figure(file_name, name_figure_tuple[1])
             mlflow.log_artifact(file_name)
+
+
+def save_figure(file_name: str, figure: SaveableFigure):
+    figure.savefig(file_name, bbox_inches="tight")
 
 
 def get_scatter_plot(
@@ -127,3 +132,21 @@ def get_scatter_plot(
         ax=ax)
 
     return scatter_plot.get_figure()
+
+
+def get_max_f1_score_threshold(y_true: np.array, y_score: np.array, values_range: Tuple = None):
+    if values_range is None:
+        values_range = (y_score.min(), y_score.max())
+
+    scores_in_range = y_score[np.array((y_score > values_range[0]) & (y_score < values_range[1]))]
+
+    # noinspection PyUnresolvedReferences
+    f1_score_tpl = np.array([(f1_score(y_true, (y_score >= scores_in_range[i]).astype(int)), int(i))
+                             for i in range(len(scores_in_range))])
+
+    max_f1_tpl = sorted(f1_score_tpl, key=lambda x: x[0], reverse=True)[0]
+
+    max_f1 = max_f1_tpl[0]
+    threshold = scores_in_range[int(max_f1_tpl[1])]
+
+    return max_f1, threshold

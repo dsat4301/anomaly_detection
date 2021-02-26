@@ -9,11 +9,11 @@ from torch import optim, nn
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
-from base.base_nn_anomaly_detector import BaseNNAnomalyDetector
 from base.base_networks import Encoder
+from base.base_nn_anomaly_detector import BaseNNAnomalyDetector
 
 
-class SVDDNNAnomalyDetector(BaseNNAnomalyDetector):
+class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
 
     def __init__(
             self,
@@ -28,7 +28,7 @@ class SVDDNNAnomalyDetector(BaseNNAnomalyDetector):
             linear: bool = True,
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
-            scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True)):
+            scorer: Callable = None):
 
         super().__init__(
             batch_size=batch_size,

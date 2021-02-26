@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from base.base_nn_anomaly_detector import BaseNNAnomalyDetector
 
 
-class BaseGenerativeNNAnomalyDetector(BaseNNAnomalyDetector):
+class BaseGenerativeAnomalyDetector(BaseNNAnomalyDetector):
     def __init__(
             self,
             batch_size: int,
@@ -26,8 +26,8 @@ class BaseGenerativeNNAnomalyDetector(BaseNNAnomalyDetector):
             random_state: int,
             novelty: bool,
             latent_dimensions: int,
-            softmax_for_final_decoder_layer: bool = False,
-            reconstruction_loss_function: _Loss = MSELoss(reduction='mean')):
+            softmax_for_final_decoder_layer: bool,
+            reconstruction_loss_function: _Loss):
         super().__init__(
             batch_size,
             n_jobs_dataloader,

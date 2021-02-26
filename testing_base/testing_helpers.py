@@ -1,6 +1,6 @@
 from sklearn.utils.estimator_checks import check_estimator
 
-from anomaly_detectors.MahalanobisDistance.mahalanobis_distance_anomaly_detector import \
+from anomaly_detectors.distance_based.mahalanobis_distance_anomaly_detector import \
     MahalanobisDistanceAnomalyDetector
 
 EXCLUDED_SCIKIT_LEARN_ESTIMATOR_TESTS = ['check_outliers_train', 'check_outliers_fit_predict']

@@ -3,6 +3,7 @@ from typing import Callable
 
 import numpy as np
 from sklearn.base import BaseEstimator, OutlierMixin
+from sklearn.metrics import make_scorer, roc_auc_score
 from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 
 
@@ -67,6 +68,10 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
             Scalar score value.
         """
         X, y = self._check_ready_for_prediction(X, y)
+
+        if self.scorer is None:
+            return make_scorer(roc_auc_score, needs_threshold=True)(estimator=self, X=X, y_true=y)
+
         return self.scorer(estimator=self, X=X, y_true=y)
 
     # noinspection PyPep8Naming

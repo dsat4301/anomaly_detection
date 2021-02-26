@@ -5,27 +5,29 @@ from typing import Callable, Sequence
 import mlflow
 import numpy as np
 import torch
-from sklearn.metrics import make_scorer, roc_auc_score
 from torch import nn
 from torch import optim
 from torch.distributions import MultivariateNormal
 # noinspection PyProtectedMember
-from torch.nn.modules.loss import _Loss, MSELoss
+from torch.nn.modules.loss import _Loss
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
-from base.base_generative_anomaly_detector import BaseGenerativeNNAnomalyDetector
+from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector
 from base.base_networks import MultivariateGaussianEncoder, Decoder
 
 
-class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
+class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
+    LOG_VARIANCE_LOWER_LIMIT = -80
+    LOG_VARIANCE_UPPER_LIMIT = 80
+
     def __init__(
             self,
             batch_size: int = 128,
             n_jobs_dataloader: int = 4,
             n_epochs: int = 10,
             device: str = 'cpu',
-            scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True),
+            scorer: Callable = None,
             learning_rate: float = 1e-4,
             linear: bool = True,
             n_hidden_features: Sequence[int] = None,
@@ -33,7 +35,7 @@ class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
             latent_dimensions: int = 2,
             n_drawings_distributions: int = 1,
             softmax_for_final_decoder_layer: bool = False,
-            reconstruction_loss_function: _Loss = MSELoss(reduction='none')):
+            reconstruction_loss_function: _Loss = None):
         super().__init__(
             batch_size,
             n_jobs_dataloader,
@@ -51,6 +53,10 @@ class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
 
         self.n_drawings_distributions = n_drawings_distributions
 
+        if self.reconstruction_loss_function is not None \
+                and self.reconstruction_loss_function.reduction != 'none':
+            raise ValueError('Loss with reduction none required.')
+
     @property
     def offset_(self):
         return self._offset_
@@ -62,7 +68,9 @@ class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
     @property
     def _reset_loss_func(self) -> Callable:
         def reset_loss():
-            pass
+            self.divergence_loss_ = 0
+            self.reconstruction_loss_ = 0
+            self.loss_ = 0
 
         return reset_loss
 
@@ -87,7 +95,12 @@ class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
                     log_variance_encoder.repeat_interleave(self.n_drawings_distributions, dim=0))
 
                 reconstructed_samples = self.decoder_network_(z)
-                expected_reconstruction_loss = self.reconstruction_loss_function(
+
+                reconstruction_loss_function = self.reconstruction_loss_function \
+                    if self.reconstruction_loss_function is not None \
+                    else nn.MSELoss(reduction='none')
+
+                expected_reconstruction_loss = reconstruction_loss_function(
                     inputs.repeat_interleave(self.n_drawings_distributions, dim=0),
                     reconstructed_samples).mean(axis=1)
 
@@ -120,6 +133,9 @@ class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
             self.decoder_network_.add_module('softmax', nn.Softmax(dim=1))
 
         self.loss_ = 0
+        self.divergence_loss_ = 0
+        self.reconstruction_loss_ = 0
+
         self.optimizer_ = optim.Adam(
             list(self.encoder_network_.parameters()) + list(self.decoder_network_.parameters()),
             lr=self.learning_rate)
@@ -129,18 +145,41 @@ class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
         self.optimizer_.zero_grad()
 
         mean_encoder, log_variance_encoder = self.encoder_network_(inputs)
-        kl_divergence = self._get_kl_divergence(mean_encoder, log_variance_encoder)
+
+        # cap values to prevent infinity values caused by exponentiation
+        log_variance_encoder = self.get_log_variance_with_capped_values(log_variance_encoder)
+
+        # Acc. to Géron, A. (Hands-on machine learning with Scikit-Learn, Keras, and TensorFlow:Concepts, tools
+        # and techniques to build intelligent systems (O’Reilly Media, 2019); p. 589),
+        # the divergence loss should be scaled, to ensure it has appropriate scale compared to the reconstruction loss.
+        kl_divergence = self._get_kl_divergence(mean_encoder, log_variance_encoder) / self.n_features_in_
+
+        self.divergence_loss_ += kl_divergence.item()
 
         z = self._reparametrize(mean_encoder, log_variance_encoder)
 
         reconstructed = self.decoder_network_(z)
         inputs_expected = inputs.repeat_interleave(self.n_drawings_distributions, dim=0)
-        expected_reconstruction_error = self.reconstruction_loss_function(inputs_expected, reconstructed).mean()
 
-        self.loss_ = kl_divergence + expected_reconstruction_error
+        expected_reconstruction_error = self.reconstruction_loss_function(inputs_expected, reconstructed).mean() \
+            if self.reconstruction_loss_function is not None \
+            else nn.MSELoss(reduction='mean')(inputs_expected, reconstructed)
 
-        self.loss_.backward()
+        self.reconstruction_loss_ += expected_reconstruction_error.item()
+        loss = kl_divergence + expected_reconstruction_error
+        self.loss_ += loss.item()
+
+        loss.backward()
         self.optimizer_.step()
+
+    @staticmethod
+    def get_log_variance_with_capped_values(log_variance_encoder):
+        log_variance_encoder[log_variance_encoder > VAEAnomalyDetector.LOG_VARIANCE_UPPER_LIMIT] = \
+            VAEAnomalyDetector.LOG_VARIANCE_UPPER_LIMIT
+        log_variance_encoder[log_variance_encoder < VAEAnomalyDetector.LOG_VARIANCE_LOWER_LIMIT] = \
+            VAEAnomalyDetector.LOG_VARIANCE_LOWER_LIMIT
+
+        return log_variance_encoder
 
     @staticmethod
     def _get_kl_divergence(mean: torch.Tensor, log_variance: torch.Tensor) -> torch.Tensor:
@@ -159,6 +198,8 @@ class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
                torch.einsum('ij,ikj->ikj', standard_deviation, epsilon).flatten(end_dim=1)
 
     def _sample(self, mean: torch.Tensor, log_variance: torch.Tensor) -> torch.Tensor:
+        log_variance = self.get_log_variance_with_capped_values(log_variance)
+
         covariance_matrix = torch.einsum('ij,jk->ijk', log_variance.exp(), torch.eye(log_variance.size()[1]))
         distribution = MultivariateNormal(loc=mean, covariance_matrix=covariance_matrix)
 
@@ -169,7 +210,15 @@ class VAEAnomalyDetector(BaseGenerativeNNAnomalyDetector):
             step=epoch,
             metrics=OrderedDict([
                 ('Training time', epoch_train_time),
-                ('Loss', self.loss_.item())]))
+                ('Loss', self.loss_),
+                ('Divergence loss', self.divergence_loss_),
+                ('Reconstruction loss', self.reconstruction_loss_)]))
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'
               f' Loss: {self.loss_}')
+
+    def _more_tags(self):
+        tags = super()._more_tags()
+        tags['non_deterministic'] = True
+
+        return tags
