@@ -3,12 +3,12 @@ from typing import Collection, Tuple
 
 import matplotlib.pyplot as plt
 import mlflow
+import numpy as np
 import pandas as pd
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, f1_score
 
 from util.cf_matrix import make_confusion_matrix
-import numpy as np
 
 
 # noinspection SpellCheckingInspection
