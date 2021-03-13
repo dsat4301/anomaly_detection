@@ -1,14 +1,13 @@
 from typing import Callable
 
 import numpy as np
-from sklearn.metrics import make_scorer, roc_auc_score
 
 from base.base_distance_anomaly_detector import BaseDistanceAnomalyDetector
 
 
 class ChiSquareDistanceAnomalyDetector(BaseDistanceAnomalyDetector):
     def __init__(self,
-                 scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True),
+                 scorer: Callable = None,
                  random_state: int = None,
                  alpha: float = 1e-3):
         super(ChiSquareDistanceAnomalyDetector, self).__init__(scorer, random_state)

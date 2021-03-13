@@ -1,14 +1,13 @@
 from typing import Callable
 
 import numpy as np
-from sklearn.metrics import make_scorer, roc_auc_score
 
 from base.base_distance_anomaly_detector import BaseDistanceAnomalyDetector
 
 
 class EuclideanDistanceAnomalyDetector(BaseDistanceAnomalyDetector):
 
-    def __init__(self, scorer: Callable = make_scorer(roc_auc_score, needs_threshold=True), random_state: int = None):
+    def __init__(self, scorer: Callable = None, random_state: int = None):
         super(EuclideanDistanceAnomalyDetector, self).__init__(scorer, random_state)
     
     def _initialize_fitting(self, normal_data: np.ndarray):

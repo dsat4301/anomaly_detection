@@ -8,7 +8,6 @@ from torch import nn, optim
 from torch.nn import Softmax
 # noinspection PyProtectedMember
 from torch.nn.modules.loss import _Loss
-# noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 
 from base.base_generative_anomaly_detector import BaseGenerativeAnomalyDetector

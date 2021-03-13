@@ -5,7 +5,6 @@ from typing import Sequence, Callable
 import mlflow
 import numpy as np
 import torch
-from sklearn.utils import check_X_y, check_array
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader
 

@@ -1,13 +1,14 @@
+from unittest import TestCase
+
 from parameterized import parameterized
 
 from anomaly_detectors.DeepSVDD.SVDD_anomaly_detector import DeepSVDDAnomalyDetector
 from testing_base.base_anomaly_detector_tests import BaseAnomalyDetectorTests
-from testing_base.testing_helpers import get_estimator_checks
 
 
-class DeepSVDDAnomalyDetectorTests(BaseAnomalyDetectorTests):
+class DeepSVDDAnomalyDetectorTests(BaseAnomalyDetectorTests, TestCase):
 
-    checks = get_estimator_checks(DeepSVDDAnomalyDetector())
+    checks = BaseAnomalyDetectorTests.get_estimator_checks(DeepSVDDAnomalyDetector())
 
     def create_sut(self):
         return DeepSVDDAnomalyDetector()

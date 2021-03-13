@@ -1,11 +1,9 @@
 from abc import abstractmethod
 from typing import Callable
 
-from sklearn.metrics import make_scorer, roc_auc_score
+import numpy as np
 
 from base.base_anomaly_detector import BaseAnomalyDetector
-
-import numpy as np
 
 
 class BaseDistanceAnomalyDetector(BaseAnomalyDetector):

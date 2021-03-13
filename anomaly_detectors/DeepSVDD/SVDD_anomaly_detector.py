@@ -4,7 +4,6 @@ from typing import Callable, Sequence
 import mlflow
 import numpy as np
 import torch
-from sklearn.metrics import make_scorer, roc_auc_score
 from torch import optim, nn
 # noinspection PyProtectedMember
 from torch.utils.data import DataLoader

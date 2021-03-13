@@ -3,7 +3,6 @@ from typing import Callable, Sequence
 
 import numpy as np
 import torch
-from torch.nn import MSELoss
 # noinspection PyProtectedMember
 from torch.nn.modules.loss import _Loss
 # noinspection PyProtectedMember

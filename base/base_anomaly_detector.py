@@ -107,7 +107,14 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
         return X, y
 
     def _more_tags(self):
-        return {'binary_only': True}
+        # noinspection SpellCheckingInspection
+        return {
+            'binary_only': True,
+            '_xfail_checks': {
+                'check_outliers_train': 'Replaced with customized test.',
+                'check_outliers_fit_predict': 'Replaced with customized test.',
+            }
+        }
 
     @staticmethod
     def get_mapped_prediction(y: np.ndarray):
