@@ -174,7 +174,7 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
         self.optimizer_.step()
 
     @staticmethod
-    def get_log_variance_with_capped_values(log_variance_encoder):
+    def get_log_variance_with_capped_values(log_variance_encoder: torch.Tensor):
         log_variance_encoder[log_variance_encoder > VAEAnomalyDetector.LOG_VARIANCE_UPPER_LIMIT] = \
             VAEAnomalyDetector.LOG_VARIANCE_UPPER_LIMIT
         log_variance_encoder[log_variance_encoder < VAEAnomalyDetector.LOG_VARIANCE_LOWER_LIMIT] = \

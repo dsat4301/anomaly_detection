@@ -45,6 +45,8 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
     >>> ganomaly.predict(data)
     array([0, 1, 1, 1, 1])
     """
+    PRECISION = 5
+
     @property
     def offset_(self):
         return self._offset_
@@ -133,7 +135,7 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
 
                 scores += anomaly_scores.cpu().data.numpy().tolist()
 
-        return np.array(scores)
+        return np.array(scores).round(self.PRECISION)
 
     def _initialize_fitting(self, train_loader: DataLoader):
 
