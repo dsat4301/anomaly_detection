@@ -1,4 +1,4 @@
-# Anomaly detection
+# anomaly_detection
 
 This repository provides implementations of anomaly detection approaches as  [scikit-learn](https://scikit-learn.org/stable/#) estimators. For the neural network-based models, [PyTorch](https://pytorch.org/) is also used. All implement the abstract classes *BaseEstimator* and *OutlierMixin*. The following methods acc. to the scikit-learn API are supported:
 
