@@ -12,6 +12,8 @@ from base.base_nn_anomaly_detector import BaseNNAnomalyDetector
 
 
 class BaseGenerativeAnomalyDetector(BaseNNAnomalyDetector):
+    """ Base class for generative anomaly detectors, implementing BaseNNAnomalyDetector."""
+
     def __init__(
             self,
             batch_size: int,

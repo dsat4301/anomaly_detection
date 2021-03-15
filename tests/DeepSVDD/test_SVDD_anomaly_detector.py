@@ -7,7 +7,6 @@ from testing_base.base_anomaly_detector_tests import BaseAnomalyDetectorTests
 
 
 class DeepSVDDAnomalyDetectorTests(BaseAnomalyDetectorTests, TestCase):
-
     checks = BaseAnomalyDetectorTests.get_estimator_checks(DeepSVDDAnomalyDetector())
 
     def create_sut(self):

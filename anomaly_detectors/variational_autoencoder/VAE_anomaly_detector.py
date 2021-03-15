@@ -56,7 +56,7 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
         if self.reconstruction_loss_function is not None \
                 and self.reconstruction_loss_function.reduction != 'none':
-            raise ValueError('Loss with reduction none required.')
+            raise ValueError('Invalid reduction for loss.')
 
     @property
     def offset_(self):
@@ -69,9 +69,10 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
     @property
     def _reset_loss_func(self) -> Callable:
         def reset_loss():
-            self.divergence_loss_ = 0
-            self.reconstruction_loss_ = 0
-            self.loss_ = 0
+            self._train_divergence_losses_epoch_ = []
+            self._train_reconstruction_losses_epoch_ = []
+            self._train_losses_epoch_ = []
+            self._validation_losses_epoch_ = []
 
         return reset_loss
 
@@ -80,7 +81,7 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
         X, _ = self._check_ready_for_prediction(X)
 
         # noinspection PyTypeChecker
-        loader = self._get_test_loader(X)
+        loader = self._get_data_loader(X, shuffle=False)
 
         scores = []
         self.encoder_network_.eval()
@@ -97,13 +98,9 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
                 reconstructed_samples = self.decoder_network_(z)
 
-                reconstruction_loss_function = self.reconstruction_loss_function \
-                    if self.reconstruction_loss_function is not None \
-                    else nn.MSELoss(reduction='none')
-
-                expected_reconstruction_loss = reconstruction_loss_function(
-                    inputs.repeat_interleave(self.n_draws_latent_distribution, dim=0),
-                    reconstructed_samples).mean(axis=1)
+                expected_reconstruction_loss = self._get_reconstruction_loss(
+                    reconstructed_samples,
+                    inputs.repeat_interleave(self.n_draws_latent_distribution, dim=0))
 
                 expected_reconstruction_loss = torch.reshape(
                     expected_reconstruction_loss,
@@ -112,6 +109,13 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
                 scores += expected_reconstruction_loss.mean(dim=1).cpu().data.numpy().tolist()
 
         return np.array(scores).round(self.PRECISION)
+
+    def _get_reconstruction_loss(self, inputs: torch.Tensor, targets: torch.Tensor):
+        reconstruction_loss_function = self.reconstruction_loss_function \
+            if self.reconstruction_loss_function is not None \
+            else nn.MSELoss(reduction='none')
+
+        return reconstruction_loss_function(inputs, targets).mean(axis=1)
 
     def _initialize_fitting(self, train_loader: DataLoader):
         n_hidden_features_fallback = \
@@ -133,18 +137,29 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
         if self.softmax_for_final_decoder_layer:
             self.decoder_network_.add_module('softmax', nn.Softmax(dim=1))
 
-        self.loss_ = 0
-        self.divergence_loss_ = 0
-        self.reconstruction_loss_ = 0
+        self._train_losses_epoch_ = []
+        self._train_divergence_losses_epoch_ = []
+        self._train_reconstruction_losses_epoch_ = []
+        self._validation_losses_epoch_ = []
 
-        self.optimizer_ = optim.Adam(
+        self._optimizer_ = optim.Adam(
             list(self.encoder_network_.parameters()) + list(self.decoder_network_.parameters()),
             lr=self.learning_rate)
         self._offset_ = 0
 
     def _optimize_params(self, inputs: torch.Tensor):
-        self.optimizer_.zero_grad()
+        kl_divergence, expected_reconstruction_errors = self._get_losses(inputs)
+        losses = kl_divergence + expected_reconstruction_errors
 
+        self._optimizer_.zero_grad()
+        losses.mean().backward()
+        self._optimizer_.step()
+
+        self._train_losses_epoch_ += losses.data.numpy().tolist()
+        self._train_reconstruction_losses_epoch_ += expected_reconstruction_errors.data.numpy().tolist()
+        self._train_divergence_losses_epoch_ += [kl_divergence.item()]
+
+    def _get_losses(self, inputs: torch.Tensor):
         mean_encoder, log_variance_encoder = self.encoder_network_(inputs)
 
         # cap values to prevent infinity values caused by exponentiation
@@ -153,25 +168,15 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
         # Acc. to Géron, A. (Hands-on machine learning with Scikit-Learn, Keras, and TensorFlow:Concepts, tools
         # and techniques to build intelligent systems (O’Reilly Media, 2019); p. 589),
         # the divergence loss should be scaled, to ensure it has appropriate scale compared to the reconstruction loss.
+
         kl_divergence = self._get_kl_divergence(mean_encoder, log_variance_encoder) / self.n_features_in_
-
-        self.divergence_loss_ += kl_divergence.item()
-
         z = self._reparametrize(mean_encoder, log_variance_encoder)
-
         reconstructed = self.decoder_network_(z)
+
         inputs_expected = inputs.repeat_interleave(self.n_draws_latent_distribution, dim=0)
+        expected_reconstruction_errors = self._get_reconstruction_loss(inputs_expected, reconstructed)
 
-        expected_reconstruction_error = self.reconstruction_loss_function(inputs_expected, reconstructed).mean() \
-            if self.reconstruction_loss_function is not None \
-            else nn.MSELoss(reduction='mean')(inputs_expected, reconstructed)
-
-        self.reconstruction_loss_ += expected_reconstruction_error.item()
-        loss = kl_divergence + expected_reconstruction_error
-        self.loss_ += loss.item()
-
-        loss.backward()
-        self.optimizer_.step()
+        return kl_divergence, expected_reconstruction_errors
 
     @staticmethod
     def get_log_variance_with_capped_values(log_variance_encoder: torch.Tensor):
@@ -211,13 +216,27 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
         return samples
 
     def _log_epoch_results(self, epoch: int, epoch_train_time: float):
+        mean_divergence_loss = np.array(self._train_divergence_losses_epoch_).mean()
+        mean_reconstruction_loss = np.array(self._train_reconstruction_losses_epoch_).mean()
+        mean_training_loss = np.array(self._train_losses_epoch_).mean()
+        mean_validation_loss = np.array(self._validation_losses_epoch_).mean()
+
         mlflow.log_metrics(
             step=epoch,
             metrics=OrderedDict([
                 ('Training time', epoch_train_time),
-                ('Loss', self.loss_),
-                ('Divergence loss', self.divergence_loss_),
-                ('Reconstruction loss', self.reconstruction_loss_)]))
+                ('Training loss', mean_training_loss),
+                ('Training divergence loss', mean_divergence_loss),
+                ('Training reconstruction loss', mean_reconstruction_loss),
+                ('Validation loss', mean_validation_loss)]))
+
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'
-              f' Loss: {self.loss_}')
+              f' Loss: {self._train_losses_epoch_}')
+
+    def _update_validation_loss_epoch(self, epoch: int, inputs: torch.Tensor):
+        kl_divergence, expected_reconstruction_errors = self._get_losses(inputs)
+
+        losses = kl_divergence + expected_reconstruction_errors
+
+        self._validation_losses_epoch_ += losses.data.numpy().tolist()

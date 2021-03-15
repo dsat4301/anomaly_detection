@@ -1,6 +1,7 @@
 import json
-import numpy as np
+
 import mlflow
+import numpy as np
 
 
 def log_model_summary(

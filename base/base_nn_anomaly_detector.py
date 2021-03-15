@@ -13,36 +13,7 @@ from util.data import BaseDataset
 
 
 class BaseNNAnomalyDetector(BaseAnomalyDetector):
-    """ Base anomaly detector class implementing scikit-learn's BaseEstimator and OutlierMixin
-
-    batch_size : int, default=256
-        Batch size.
-    n_jobs_dataloader : int, default=4
-        Value for parameter num_workers of torch.utils.data.DataLoader
-        (https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
-        Indicates how many subprocesses to use for data loading with values greater 0 enabling
-        multi-process data loading.
-    n_epochs : int, default=10
-        Number of epochs.
-    device : {'cpu', 'cuda'}, default='cpu'
-        Specifies the computational device using device agnostic code:
-        (https://pytorch.org/docs/stable/notes/cuda.html).
-    threshold : float = .5
-        Threshold to be used for predict function.
-        Values greater than or equal to threshold will be classified as anomalies.
-    scorer : Callable, default=make_scorer(roc_auc_score, needs_threshold=True)
-        Scorer instance to be used in score function.
-    learning_rate : int, default=0.0001
-        Learning rate.
-    linear : bool, default=True
-        Specifies if only linear layers without activation should be used in the subnetworks.
-    n_hidden_features : Sequence[int], default=None
-        Is Ignored if liner is True.
-        Determines the number of neurons to be used in the subnetwork layers.
-        Expects a Sequence with decreasingly ordered values with the last value greater than size_z.
-    random_state : int, default=None
-        Value for torch.seed. If None, no seed will be used.
-    """
+    """Base class for neural network-based anomaly detectors, implementing BaseAnomalyDetector."""
 
     def __init__(
             self,
@@ -86,31 +57,39 @@ class BaseNNAnomalyDetector(BaseAnomalyDetector):
         :param X : np.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and
             n_features is the number of features.
-        :param y : binary np.ndarray of with shape (n_samples,), default=None
+        :param y : binary np.ndarray of shape (n_samples,), default=None
             If given, y is used to filter normal values from data. This means only the samples of data
             with the smaller label in y are used for training.
         :param kwargs :
             is_logging_enabled: bool, default=False
                 Indicates if epoch results should be printed to the console resp. to a mlflow
                 run which has to be started outside.
-        :return : GANomalyEstimator
+            X_validation : np.ndarray of shape (n_samples, n_features)
+                Set of validation samples. It must have the same number of features like X.
+                The set is ignored, if the logging is disabled.
+            y_validation : binary np.ndarray of shape (n_samples,)
+                The validation targets, used to filter normal values from the validation set
+                and to log the scores using the score function for each epoch.
+                It is ignored if logging is disabled (default).
+        :return : BaseNNAnomalyDetector
             The fitted instance.
         """
 
-        is_logging_enabled = False
-        if 'is_logging_enabled' in kwargs and kwargs['is_logging_enabled'] is True:
-            is_logging_enabled = True
-            mlflow.log_params(self.get_params())
-
         normal_data = self._get_normal_data(X, y)
         self._set_n_features_in(normal_data)
+        train_loader = self._get_data_loader(data=normal_data, shuffle=True)
 
-        train_set = BaseDataset(data=normal_data)
-        train_loader = DataLoader(
-            dataset=train_set,
-            shuffle=True,
-            batch_size=self.batch_size,
-            num_workers=self.n_jobs_dataloader)
+        is_logging_enabled = kwargs.get('is_logging_enabled', False)
+        X_validation = kwargs.get('X_validation')
+        y_validation = kwargs.get('y_validation')
+        validation_loader = None
+
+        if is_logging_enabled:
+            mlflow.log_params(self.get_params())
+
+            if X_validation is not None:
+                normal_validation_data = self._get_normal_data(X_validation, y_validation)
+                validation_loader = self._get_data_loader(data=normal_validation_data, shuffle=False)
 
         self._initialize_fitting(train_loader)
 
@@ -133,6 +112,16 @@ class BaseNNAnomalyDetector(BaseAnomalyDetector):
             epoch_train_time = time.time() - epoch_start_time
 
             if is_logging_enabled:
+                if validation_loader is not None:
+                    with torch.no_grad():
+                        for inputs in validation_loader:
+                            inputs = inputs.to(self.device)
+                            self._update_validation_loss_epoch(epoch + 1, inputs)
+
+                if X_validation is not None and y_validation is not None:
+                    mlflow.log_metric('Score train', self.score(X, y), step=epoch + 1)
+                    mlflow.log_metric('Score validation', self.score(X_validation, y_validation), step=epoch + 1)
+
                 self._log_epoch_results(epoch + 1, epoch_train_time)
 
         train_time = time.time() - start_time
@@ -143,14 +132,16 @@ class BaseNNAnomalyDetector(BaseAnomalyDetector):
 
         return self
 
-    def _get_test_loader(self, data: np.ndarray):
-        prediction_set = BaseDataset(data=data)
-        prediction_loader = DataLoader(
-            dataset=prediction_set,
+    def _get_data_loader(self, data: np.ndarray, shuffle: bool):
+        return DataLoader(
+            BaseDataset(data),
             batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.n_jobs_dataloader)
-        return prediction_loader
+            num_workers=self.n_jobs_dataloader,
+            shuffle=shuffle)
+
+    @abstractmethod
+    def _update_validation_loss_epoch(self, epoch: int, inputs: torch.Tensor):
+        raise NotImplemented
 
     @abstractmethod
     def _initialize_fitting(self, train_loader: DataLoader):

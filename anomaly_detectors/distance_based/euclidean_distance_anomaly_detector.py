@@ -9,7 +9,7 @@ class EuclideanDistanceAnomalyDetector(BaseDistanceAnomalyDetector):
 
     def __init__(self, scorer: Callable = None, random_state: int = None):
         super(EuclideanDistanceAnomalyDetector, self).__init__(scorer, random_state)
-    
+
     def _initialize_fitting(self, normal_data: np.ndarray):
         self.distribution_center_ = normal_data.mean(axis=0)
 

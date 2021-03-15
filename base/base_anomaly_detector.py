@@ -8,6 +8,7 @@ from sklearn.utils.validation import check_is_fitted, check_X_y, check_array
 
 
 class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
+    """ Base anomaly detector class, implementing scikit-learn's BaseEstimator and OutlierMixin."""
 
     def __init__(
             self,
@@ -21,11 +22,6 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
     def offset_(self):
         raise NotImplemented
 
-    @offset_.setter
-    @abstractmethod
-    def offset_(self, value: np.ndarray):
-        raise NotImplemented
-
     # noinspection PyPep8Naming
     @abstractmethod
     def fit(self, X: np.ndarray, y: np.ndarray = None, **kwargs):
@@ -37,21 +33,35 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
         raise NotImplemented
 
     # noinspection PyPep8Naming
-    def predict(self, X):
+    def predict(self, X: np.ndarray):
         """ Return the classification result based on the results of decision_function.
-        :param X: np.ndarray of shape (n_samples, n_features)
+
+        :parameter X : np.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and
             n_features is the number of features.
-        :return: np.ndarray with shape (n_samples,)
+
+        :return : np.ndarray with shape (n_samples,)
             Binary array with -1 indicating an anomaly and 1 indicating normal data.
         """
+
         X, _ = self._check_ready_for_prediction(X)
         decision_function = self.decision_function(X)
         v_mapping = np.vectorize(lambda x: -1 if x else 1)
         return v_mapping((decision_function <= 0))
 
     # noinspection PyPep8Naming
-    def decision_function(self, X: np.ndarray):
+    def decision_function(self, X: np.ndarray) -> np.ndarray:
+        """ Return decision_function value, considering offset_.
+
+        :parameter X : np.ndarray of shape (n_samples, n_features)
+            Set of samples, where n_samples is the number of samples and
+            n_features is the number of features.
+
+        :return: np.ndarray of shape (n_samples,)
+            Array of anomaly scores.
+            Higher values indicate that an instance is more likely to be anomalous.
+        """
+
         X, _ = self._check_ready_for_prediction(X)
         anomaly_score = self.score_samples(X)
         return anomaly_score - self.offset_
@@ -86,7 +96,7 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
                 raise ValueError
         else:
             # noinspection PyTypeChecker
-            normal_data = np.array(check_array(X))
+            normal_data = np.array(check_array(X, estimator=self))
         return normal_data
 
     def _set_n_features_in(self, normal_data):

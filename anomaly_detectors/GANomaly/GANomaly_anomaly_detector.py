@@ -17,12 +17,15 @@ from base.base_networks import GeneratorNet, DiscriminatorNet
 
 
 class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
-    """Semi-Supervised Anomaly Detection via Adversarial Training.
+    """ Semi-Supervised Anomaly Detection via Adversarial Training.
 
     Classification of samples as anomaly or normal data based on GANomaly architecture
     introduced by: https://arxiv.org/pdf/1805.06725.pdf.
     ----------
-    size_z : int, default=2
+
+    Parameters
+    ----------
+    latent_dimensions : int, default=2
         Latent space dimensions equivalent to the number of neurons in the last encoder layer.
     weight_adverserial_loss : float, default=1
         Weight of the adverserial loss term in the generator loss-function.
@@ -45,6 +48,7 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
     >>> ganomaly.predict(data)
     array([0, 1, 1, 1, 1])
     """
+
     PRECISION = 5
 
     @property
@@ -62,7 +66,11 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
 
     @property
     def _reset_loss_func(self) -> Callable:
-        return self.loss_.reset
+        def reset_losses():
+            self._training_loss_epoch_.reset()
+            self._validation_loss_epoch_.reset()
+
+        return reset_losses
 
     def __init__(
             self,
@@ -103,24 +111,24 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
         self.optimizer_betas = optimizer_betas
 
         if self.reconstruction_loss_function is not None \
-                and self.reconstruction_loss_function.reduction != 'mean':
-            raise ValueError('Loss with reduction mean required.')
+                and self.reconstruction_loss_function.reduction != 'none':
+            raise ValueError('Invalid reduction for loss.')
 
     # noinspection PyPep8Naming
     def score_samples(self, X: np.ndarray):
         """ Return the anomaly score.
 
-        :param X: np.ndarray of shape (n_samples, n_features)
+        :param X: numpy.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and
             n_features is the number of features.
-        :return: np.ndarray with shape (n_samples,)
+        :return: numpy.ndarray with shape (n_samples,)
             Array with positive scores with higher values indicating higher probability of the
             sample being an anomaly.
         """
         X, _ = self._check_ready_for_prediction(X)
 
         # noinspection PyTypeChecker
-        loader = self._get_test_loader(X)
+        loader = self._get_data_loader(X, shuffle=False)
 
         scores = []
 
@@ -139,11 +147,12 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
 
     def _initialize_fitting(self, train_loader: DataLoader):
 
-        n_hidden_features_fallback =\
+        n_hidden_features_fallback = \
             [self.n_features_in_ - math.floor((self.n_features_in_ - self.latent_dimensions) / 2)]
 
         if self.random_state is not None:
             torch.manual_seed(self.random_state)
+
         self.generator_net_ = GeneratorNet(
             self.latent_dimensions,
             self.n_features_in_,
@@ -158,57 +167,81 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
         if self.softmax_for_final_decoder_layer:
             self.generator_net_.decoder.add_module('softmax', torch.nn.Softmax(dim=1))
 
-        self.optimizer_generator_ = optim.Adam(
+        self._optimizer_generator_ = optim.Adam(
             params=self.generator_net_.parameters(),
             lr=self.learning_rate,
             betas=self.optimizer_betas)
-        self.optimizer_discriminator_ = optim.Adam(
+        self._optimizer_discriminator_ = optim.Adam(
             params=self.discriminator_net_.parameters(),
             lr=self.learning_rate,
             betas=self.optimizer_betas)
-        self.loss_ = GANomalyLoss(
+        self._training_loss_epoch_ = GANomalyLoss(
             device=self.device,
             weight_adverserial_loss=self.weight_adverserial_loss,
             weight_contextual_loss=self.weight_contextual_loss,
             weight_encoder_loss=self.weight_encoder_loss,
             reconstruction_loss_function=self.reconstruction_loss_function)
+        self._validation_loss_epoch_ = GANomalyLoss(
+            device=self.device,
+            weight_adverserial_loss=self.weight_adverserial_loss,
+            weight_contextual_loss=self.weight_contextual_loss,
+            weight_encoder_loss=self.weight_encoder_loss,
+            reconstruction_loss_function=self.reconstruction_loss_function)
+
         self._offset_ = 0
 
     def _optimize_params(self, inputs: torch.Tensor):
-        self.optimizer_generator_.zero_grad()
-        self.optimizer_discriminator_.zero_grad()
 
-        # Forward pass
         generator_output = self.generator_net_(inputs)
         classifier_real, features_real = self.discriminator_net_(inputs)
         classifier_fake, features_fake = self.discriminator_net_(generator_output[0].detach())
 
-        # Backward pass
+        generator_loss = self._training_loss_epoch_.update_generator_loss(
+            inputs,
+            generator_output,
+            features_real,
+            features_fake)
 
-        # Generator
-        generator_loss = self.loss_.update_generator_loss(inputs,
-                                                          generator_output,
-                                                          features_real,
-                                                          features_fake)
+        self._optimizer_generator_.zero_grad()
         generator_loss.backward(retain_graph=True)
-        self.optimizer_generator_.step()
+        self._optimizer_generator_.step()
 
-        # Discriminator
-        discriminator_loss = self.loss_.update_discriminator_loss(classifier_real, classifier_fake)
+        discriminator_loss = self._training_loss_epoch_.update_discriminator_loss(classifier_real, classifier_fake)
+
+        self._optimizer_discriminator_.zero_grad()
         discriminator_loss.backward()
-        self.optimizer_discriminator_.step()
+        self._optimizer_discriminator_.step()
 
     def _log_epoch_results(self, epoch: int, epoch_train_time: float):
+        mean_training_losses = self._training_loss_epoch_.get_mean_epoch_results()
+        mean_validation_losses = self._validation_loss_epoch_.get_mean_epoch_results()
+
         mlflow.log_metrics(
             step=epoch,
             metrics=OrderedDict([
                 ('Training time', epoch_train_time),
-                ('Adverserial loss', self.loss_.adverserial_loss_epoch.item()),
-                ('Contextual loss', self.loss_.contextual_loss_epoch.item()),
-                ('Encoder loss', self.loss_.encoder_loss_epoch.item()),
-                ('Generator loss', self.loss_.generator_loss_epoch.item()),
-                ('Discriminator loss', self.loss_.discriminator_loss_epoch.item())]))
+                ('Training adverserial loss', mean_training_losses['adverserial_loss']),
+                ('Training contextual loss', mean_training_losses['contextual_loss']),
+                ('Training encoder loss', mean_training_losses['encoder_loss']),
+                ('Training generator loss', mean_training_losses['generator_loss']),
+                ('Training discriminator loss', mean_training_losses['discriminator_loss']),
+                ('Validation generator loss', mean_validation_losses['generator_loss']),
+                ('Validation discriminator loss', mean_validation_losses['discriminator_loss'])]))
+
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'
-              f' Generator Loss: {self.loss_.generator_loss_epoch},'
-              f' Discriminator Loss: {self.loss_.discriminator_loss_epoch}')
+              f" Generator Loss: {mean_training_losses['generator_loss']},"
+              f" Discriminator Loss: {mean_training_losses['discriminator_loss']}")
+
+    def _update_validation_loss_epoch(self, epoch: int, inputs: torch.Tensor):
+        generator_output = self.generator_net_(inputs)
+        classifier_real, features_real = self.discriminator_net_(inputs)
+        classifier_fake, features_fake = self.discriminator_net_(generator_output[0].detach())
+
+        _ = self._validation_loss_epoch_.update_generator_loss(
+            inputs,
+            generator_output,
+            features_real,
+            features_fake)
+
+        _ = self._validation_loss_epoch_.update_discriminator_loss(classifier_real, classifier_fake)

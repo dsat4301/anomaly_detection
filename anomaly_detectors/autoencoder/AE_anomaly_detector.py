@@ -15,6 +15,58 @@ from base.base_networks import Encoder, Decoder
 
 
 class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
+    """ Autoencoder-based anomaly detection.
+
+    Prediction of anomaly scores for samples based on a reconstruction loss value.
+
+    Parameters
+    ----------
+    batch_size : int, default=128
+        Batch size.
+    n_jobs_dataloader: int, default=4,
+        Value for parameter num_workers of torch.utils.data.DataLoader
+        (https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
+        Indicates how many subprocesses to use for data loading with values greater 0 enabling
+        multi-process data loading.
+    n_epochs: int, default=10,
+        Number of epochs.
+    device : {'cpu', 'cuda'}, default='cpu'
+        Specifies the computational device using device agnostic code:
+        (https://pytorch.org/docs/stable/notes/cuda.html).
+    scorer : Callable
+        Scorer instance to be used in score function.
+    learning_rate: float, default=0.0001,
+        Learning rate.
+    linear : bool, default=True
+        Specifies if only linear layers without activation are used in encoder and decoder.
+    n_hidden_features : Sequence[int], default=None
+        Is Ignored if liner is True.
+        Number of units used in the hidden encoder and decoder layers.
+    random_state: int, default=None
+        Scorer instance used in score function.
+    latent_dimensions: int, default=2
+        Number of latent dimensions.
+    softmax_for_final_decoder_layer: bool, default=False
+        Specifies if a softmax layer is inserted after the final decoder layer.
+    reconstruction_loss_function: _Loss, default=None
+        The _Loss instance for determining the reconstruction loss. If None, MSELoss is used.
+
+    Attributes
+    ----------
+    encoder_network_ : torch.nn.Module
+        The encoder network.
+    decoder_network_ : torch.nn.Module
+        The decoder_network.
+
+    Examples
+    --------
+    >>> from anomaly_detectors.autoencoder.AE_anomaly_detector import AEAnomalyDetector
+    >>> data = np.array([[0], [0.44], [0.45], [0.46], [1]])
+    >>> ae = AEAnomalyDetector().fit(data)
+    >>> ae.score_samples(data)
+    array([0.26844, 0.00374, 0.00258, 0.00163, 0.27086])
+    """
+
     PRECISION = 5
 
     def __init__(
@@ -32,15 +84,15 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
             softmax_for_final_decoder_layer: bool = False,
             reconstruction_loss_function: _Loss = None):
         super().__init__(
-            batch_size,
-            n_jobs_dataloader,
-            n_epochs,
-            device,
-            scorer,
-            learning_rate,
-            linear,
-            n_hidden_features,
-            random_state,
+            batch_size=batch_size,
+            n_jobs_dataloader=n_jobs_dataloader,
+            n_epochs=n_epochs,
+            device=device,
+            scorer=scorer,
+            learning_rate=learning_rate,
+            linear=linear,
+            n_hidden_features=n_hidden_features,
+            random_state=random_state,
             novelty=True,
             latent_dimensions=latent_dimensions,
             reconstruction_loss_function=reconstruction_loss_function,
@@ -54,7 +106,14 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
     @property
     def offset_(self):
+        """Gets the threshold, applied for decision_function."""
         return self._offset_
+
+    @offset_.setter
+    def offset_(self, value):
+        """Sets the threshold, applied for decision_function"""
+        # noinspection PyAttributeOutsideInit
+        self._offset_ = value
 
     @property
     def _networks(self) -> Sequence[torch.nn.Module]:
@@ -63,16 +122,27 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
     @property
     def _reset_loss_func(self) -> Callable:
         def func():
-            pass
+            self._loss_epoch_ = []
+            self._validation_loss_epoch_ = []
 
         return func
 
     # noinspection PyPep8Naming
     def score_samples(self, X: np.ndarray):
+        """Return the anomaly score.
+
+        :param X: numpy.ndarray of shape (n_samples, n_features)
+            Set of samples to be scored, where n_samples is the number of samples and
+            n_features is the number of features.
+
+        :return: numpy.ndarray with shape (n_samples,)
+            Array with positive scores.
+            Higher values indicate that an instance is more likely to be anomalous.
+        """
         X, _ = self._check_ready_for_prediction(X)
 
         # noinspection PyTypeChecker
-        loader = self._get_test_loader(X)
+        loader = self._get_data_loader(data=X, shuffle=False)
 
         scores = []
         self.encoder_network_.eval()
@@ -82,9 +152,7 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
             for inputs in loader:
                 reconstructed = self.decoder_network_(self.encoder_network_(inputs))
 
-                anomaly_scores = self.reconstruction_loss_function(inputs, reconstructed).mean(axis=1) \
-                    if self.reconstruction_loss_function is not None \
-                    else nn.MSELoss(reduction='none')(inputs, reconstructed).mean(axis=1)
+                anomaly_scores = self._get_loss_function_value(inputs, reconstructed)
 
                 scores += anomaly_scores.cpu().data.numpy().tolist()
 
@@ -106,28 +174,52 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
             self.decoder_network_.add_module('softmax', Softmax(dim=1))
 
         self._offset_ = 0
-        self.loss_ = 0
-        self.optimizer_ = optim.Adam(
+        self._loss_epoch_ = None
+        self._validation_loss_epoch_ = None
+        self._optimizer_ = optim.Adam(
             list(self.encoder_network_.parameters()) + list(self.decoder_network_.parameters()),
             lr=self.learning_rate)
 
     def _optimize_params(self, inputs: torch.Tensor):
-        self.optimizer_.zero_grad()
-
         reconstructed = self.decoder_network_(self.encoder_network_(inputs))
-        self.loss_ = self.reconstruction_loss_function(inputs, reconstructed).mean() \
-            if self.reconstruction_loss_function is not None \
-            else nn.MSELoss(reduction='mean')(inputs, reconstructed)
+        current_loss = self._get_loss_function_value(inputs, reconstructed)
 
-        self.loss_.backward()
-        self.optimizer_.step()
+        # Backpropagation
+        self._optimizer_.zero_grad()
+        current_loss.mean().backward()
+        self._optimizer_.step()
+
+        self._loss_epoch_ += current_loss.data.numpy().tolist()
+
+    def _get_loss_function_value(
+            self,
+            inputs: torch.Tensor,
+            reconstructed: torch.Tensor) -> torch.Tensor:
+
+        loss = self.reconstruction_loss_function(inputs, reconstructed) \
+            if self.reconstruction_loss_function is not None \
+            else nn.MSELoss(reduction='none')(inputs, reconstructed)
+
+        return loss.mean(axis=1)
 
     def _log_epoch_results(self, epoch: int, epoch_train_time: float):
-        mlflow.log_metrics(
-            step=epoch,
-            metrics=OrderedDict([
-                ('Training time', epoch_train_time),
-                ('Loss', self.loss_.item())]))
+        mean_training_loss_epoch = np.array(self._loss_epoch_).mean()
+        mean_validation_loss_epoch = np.array(self._validation_loss_epoch_).mean()
+
+        metrics = OrderedDict([
+            ('Training time', epoch_train_time),
+            ('Training Loss', mean_training_loss_epoch)])
+
+        if self._validation_loss_epoch_ is not None:
+            metrics['Validation loss'] = mean_validation_loss_epoch
+
+        mlflow.log_metrics(step=epoch, metrics=metrics)
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'
-              f' Loss: {self.loss_}')
+              f' Loss: {mean_training_loss_epoch}')
+
+    def _update_validation_loss_epoch(self, epoch: int, inputs: torch.Tensor):
+        reconstructed = self.decoder_network_(self.encoder_network_(inputs))
+        loss = self._get_loss_function_value(inputs, reconstructed)
+
+        self._validation_loss_epoch_ += loss.data.numpy().tolist()

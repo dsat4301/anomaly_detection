@@ -203,7 +203,7 @@ class MultivariateGaussianEncoder(BaseSubNetwork):
 
         self.encoder = self.get_encoder_network()[:-1]
         self.fc_mean = nn.Linear(in_features=self.n_hidden_features[-1], out_features=self.size_z, bias=self.bias)
-        self.fc_variance =\
+        self.fc_variance = \
             nn.Linear(in_features=self.n_hidden_features[-1], out_features=self.size_z, bias=self.bias)
 
     def forward(self, x):

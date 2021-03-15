@@ -47,12 +47,12 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
 
     @property
     def offset_(self):
-        return self.__offset_
+        return self._offset_
 
     @offset_.setter
     def offset_(self, value: float):
         # noinspection PyAttributeOutsideInit
-        self.__offset_ = value
+        self._offset_ = value
 
     @property
     def _networks(self) -> Sequence[torch.nn.Module]:
@@ -61,7 +61,8 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
     @property
     def _reset_loss_func(self) -> Callable:
         def reset_loss():
-            pass
+            self._loss_epoch_ = []
+            self._validation_loss_epoch_ = []
 
         return reset_loss
 
@@ -78,7 +79,7 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
         X, _ = self._check_ready_for_prediction(X)
 
         # noinspection PyTypeChecker
-        loader = self._get_test_loader(X)
+        loader = self._get_data_loader(X, shuffle=False)
 
         scores = []
         self.network_.eval()
@@ -86,10 +87,9 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
         with torch.no_grad():
             for inputs in loader:
                 inputs = inputs.to(device=self.device)
-                output = self.network_(inputs)
-                dist = torch.sum((output - self.c_) ** 2, dim=1)
+                outputs = self.network_(inputs)
 
-                anomaly_scores = dist
+                anomaly_scores = self._get_distances_to_center(outputs, reduction='none')
                 scores += anomaly_scores.cpu().data.numpy().tolist()
 
         return np.array(scores)
@@ -105,15 +105,16 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
         self.network_.to(self.device)
 
         # noinspection SpellCheckingInspection
-        self.optimizer_ = optim.Adam(
+        self._optimizer_ = optim.Adam(
             self.network_.parameters(),
             lr=self.learning_rate,
             weight_decay=self.weight_decay,
             amsgrad=self.optimizer_name == 'amsgrad')
 
         self.c_ = self._get_initial_center_c(train_loader)
-        self.loss_ = 0
-        self.__offset_ = 0
+        self._loss_epoch_ = None
+        self._validation_loss_epoch_ = None
+        self._offset_ = 0
 
     def _get_initial_center_c(self, train_loader: DataLoader, eps=0.1):
         """Initialize hypersphere center c as the mean from an initial forward pass on the data."""
@@ -137,25 +138,37 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
         return c
 
     def _optimize_params(self, inputs: torch.Tensor):
-
-        # Zero the network parameter gradients
-        self.optimizer_.zero_grad()
-
-        # Update network parameters via backpropagation: forward + backward + optimize
         outputs = self.network_(inputs)
-        dist = torch.sum((outputs - self.c_) ** 2, dim=1)
+        loss = self._get_distances_to_center(outputs, reduction='none')
 
-        self.loss_ = torch.mean(dist)
+        self._optimizer_.zero_grad()
+        loss.mean().backward()
+        self._optimizer_.step()
 
-        self.loss_.backward()
-        self.optimizer_.step()
+        self._loss_epoch_ += loss.data.numpy().tolist()
+
+    def _get_distances_to_center(self, outputs: torch.Tensor, reduction: str):
+        distances = torch.sum((outputs - self.c_) ** 2, dim=1)
+        return distances if reduction == 'none' else distances.mean()
 
     def _log_epoch_results(self, epoch: int, epoch_train_time: float):
-        mlflow.log_metrics(
-            step=epoch,
-            metrics=OrderedDict([
-                ('Training time', epoch_train_time),
-                ('Loss', self.loss_.item())]))
+        mean_training_loss_epoch = np.array(self._loss_epoch_).mean()
+        mean_validation_loss_epoch = np.array(self._validation_loss_epoch_).mean()
+
+        metrics = OrderedDict([
+            ('Training time', epoch_train_time),
+            ('Training Loss', mean_training_loss_epoch)])
+
+        if self._validation_loss_epoch_ is not None:
+            metrics['Validation Loss'] = mean_validation_loss_epoch
+
+        mlflow.log_metrics(step=epoch, metrics=metrics)
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'
-              f' Loss: {self.loss_}')
+              f' Loss: {mean_training_loss_epoch}')
+
+    def _update_validation_loss_epoch(self, epoch: int, inputs: torch.Tensor):
+        outputs = self.network_(inputs)
+        loss = self._get_distances_to_center(outputs, reduction='none')
+
+        self._validation_loss_epoch_ += loss.data.numpy().tolist()
