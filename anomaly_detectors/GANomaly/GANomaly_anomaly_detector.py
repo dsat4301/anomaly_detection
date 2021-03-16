@@ -216,17 +216,19 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
         mean_training_losses = self._training_loss_epoch_.get_mean_epoch_results()
         mean_validation_losses = self._validation_loss_epoch_.get_mean_epoch_results()
 
-        mlflow.log_metrics(
-            step=epoch,
-            metrics=OrderedDict([
-                ('Training time', epoch_train_time),
-                ('Training adverserial loss', mean_training_losses['adverserial_loss']),
-                ('Training contextual loss', mean_training_losses['contextual_loss']),
-                ('Training encoder loss', mean_training_losses['encoder_loss']),
-                ('Training generator loss', mean_training_losses['generator_loss']),
-                ('Training discriminator loss', mean_training_losses['discriminator_loss']),
-                ('Validation generator loss', mean_validation_losses['generator_loss']),
-                ('Validation discriminator loss', mean_validation_losses['discriminator_loss'])]))
+        metrics = OrderedDict([
+            ('Training time', epoch_train_time),
+            ('Training adverserial loss', mean_training_losses['adverserial_loss']),
+            ('Training contextual loss', mean_training_losses['contextual_loss']),
+            ('Training encoder loss', mean_training_losses['encoder_loss']),
+            ('Training generator loss', mean_training_losses['generator_loss']),
+            ('Training discriminator loss', mean_training_losses['discriminator_loss'])])
+
+        if mean_validation_losses is not None:
+            metrics['Validation generator loss'] = mean_validation_losses['generator_loss']
+            metrics['Validation discriminator loss'] = mean_validation_losses['discriminator_loss']
+
+        mlflow.log_metrics(step=epoch, metrics=metrics)
 
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'

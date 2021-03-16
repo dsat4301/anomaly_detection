@@ -219,16 +219,17 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
         mean_divergence_loss = np.array(self._train_divergence_losses_epoch_).mean()
         mean_reconstruction_loss = np.array(self._train_reconstruction_losses_epoch_).mean()
         mean_training_loss = np.array(self._train_losses_epoch_).mean()
-        mean_validation_loss = np.array(self._validation_losses_epoch_).mean()
 
-        mlflow.log_metrics(
-            step=epoch,
-            metrics=OrderedDict([
-                ('Training time', epoch_train_time),
-                ('Training loss', mean_training_loss),
-                ('Training divergence loss', mean_divergence_loss),
-                ('Training reconstruction loss', mean_reconstruction_loss),
-                ('Validation loss', mean_validation_loss)]))
+        metrics = OrderedDict([
+            ('Training time', epoch_train_time),
+            ('Training loss', mean_training_loss),
+            ('Training divergence loss', mean_divergence_loss),
+            ('Training reconstruction loss', mean_reconstruction_loss)])
+
+        if self._validation_losses_epoch_:
+            metrics['Validation loss'] = np.array(self._validation_losses_epoch_).mean()
+
+        mlflow.log_metrics(step=epoch, metrics=metrics)
 
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'

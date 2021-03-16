@@ -204,14 +204,13 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
     def _log_epoch_results(self, epoch: int, epoch_train_time: float):
         mean_training_loss_epoch = np.array(self._loss_epoch_).mean()
-        mean_validation_loss_epoch = np.array(self._validation_loss_epoch_).mean()
 
         metrics = OrderedDict([
             ('Training time', epoch_train_time),
             ('Training Loss', mean_training_loss_epoch)])
 
-        if self._validation_loss_epoch_ is not None:
-            metrics['Validation loss'] = mean_validation_loss_epoch
+        if self._validation_loss_epoch_:
+            metrics['Validation loss'] = np.array(self._validation_loss_epoch_).mean()
 
         mlflow.log_metrics(step=epoch, metrics=metrics)
         print(f'Epoch {epoch}/{self.n_epochs},'

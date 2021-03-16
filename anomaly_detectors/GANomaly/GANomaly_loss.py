@@ -83,6 +83,9 @@ class GANomalyLoss:
         self.discriminator_loss_epoch = []
 
     def get_mean_epoch_results(self):
+        if not self.generator_loss_epoch or not self.discriminator_loss_epoch:
+            return None
+
         return OrderedDict([
             ('adverserial_loss', np.array(self.adverserial_loss_epoch).mean()),
             ('contextual_loss', np.array(self.contextual_loss_epoch).mean()),
