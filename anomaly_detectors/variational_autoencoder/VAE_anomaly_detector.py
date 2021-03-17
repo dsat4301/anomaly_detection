@@ -233,7 +233,7 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'
-              f' Loss: {self._train_losses_epoch_}')
+              f' Loss: {mean_training_loss}')
 
     def _update_validation_loss_epoch(self, epoch: int, inputs: torch.Tensor):
         kl_divergence, expected_reconstruction_errors = self._get_losses(inputs)
