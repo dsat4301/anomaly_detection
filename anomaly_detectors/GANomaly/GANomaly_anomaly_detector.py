@@ -213,27 +213,31 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
         self._optimizer_discriminator_.step()
 
     def _log_epoch_results(self, epoch: int, epoch_train_time: float):
-        mean_training_losses = self._training_loss_epoch_.get_mean_epoch_results()
-        mean_validation_losses = self._validation_loss_epoch_.get_mean_epoch_results()
-
         metrics = OrderedDict([
             ('Training time', epoch_train_time),
-            ('Training adverserial loss', mean_training_losses['adverserial_loss']),
-            ('Training contextual loss', mean_training_losses['contextual_loss']),
-            ('Training encoder loss', mean_training_losses['encoder_loss']),
-            ('Training generator loss', mean_training_losses['generator_loss']),
-            ('Training discriminator loss', mean_training_losses['discriminator_loss'])])
+            ('Training adverserial loss', self._training_loss_epoch_.adverserial_loss),
+            ('Training contextual loss', self._training_loss_epoch_.contextual_loss),
+            ('Training encoder loss', self._training_loss_epoch_.encoder_loss),
+            ('Training generator loss', self._training_loss_epoch_.generator_loss),
+            ('Training discriminator loss', self._training_loss_epoch_.discriminator_loss)])
 
-        if mean_validation_losses is not None:
-            metrics['Validation generator loss'] = mean_validation_losses['generator_loss']
-            metrics['Validation discriminator loss'] = mean_validation_losses['discriminator_loss']
+        if self._validation_loss_epoch_.generator_loss \
+                and self._validation_loss_epoch_.discriminator_loss \
+                and self._validation_loss_epoch_.adverserial_loss \
+                and self._validation_loss_epoch_.contextual_loss \
+                and self._validation_loss_epoch_.encoder_loss:
+            metrics['Validation generator loss'] = self._validation_loss_epoch_.generator_loss
+            metrics['Validation discriminator loss'] = self._validation_loss_epoch_.generator_loss
+            metrics['Validation adverserial loss'] = self._validation_loss_epoch_.adverserial_loss
+            metrics['Validation contextual loss'] = self._validation_loss_epoch_.contextual_loss
+            metrics['Validation encoder loss'] = self._validation_loss_epoch_.encoder_loss
 
         mlflow.log_metrics(step=epoch, metrics=metrics)
 
         print(f'Epoch {epoch}/{self.n_epochs},'
               f' Epoch training time: {epoch_train_time},'
-              f" Generator Loss: {mean_training_losses['generator_loss']},"
-              f" Discriminator Loss: {mean_training_losses['discriminator_loss']}")
+              f" Generator Loss: {self._training_loss_epoch_.generator_loss},"
+              f" Discriminator Loss: {self._training_loss_epoch_.discriminator_loss}")
 
     def _update_validation_loss_epoch(self, epoch: int, inputs: torch.Tensor):
         generator_output = self.generator_net_(inputs)

@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import numpy as np
 import torch
 from torch import nn
@@ -25,11 +23,46 @@ class GANomalyLoss:
         self.weight_encoder_loss = weight_encoder_loss
         self.loss_function_contextual = reconstruction_loss_function
 
-        self.adverserial_loss_epoch = []
-        self.contextual_loss_epoch = []
-        self.encoder_loss_epoch = []
-        self.generator_loss_epoch = []
-        self.discriminator_loss_epoch = []
+        self._adverserial_losses = []
+        self._contextual_losses = []
+        self._encoder_losses = []
+        self._generator_losses = []
+        self._discriminator_losses = []
+
+    @property
+    def adverserial_loss(self):
+        if not self._adverserial_losses:
+            return None
+
+        return np.array(self._adverserial_losses).mean()
+
+    @property
+    def contextual_loss(self):
+        if not self._contextual_losses:
+            return None
+
+        return np.array(self._contextual_losses).mean()
+
+    @property
+    def encoder_loss(self):
+        if not self._encoder_losses:
+            return None
+
+        return np.array(self._encoder_losses).mean()
+
+    @property
+    def generator_loss(self):
+        if not self._generator_losses:
+            return None
+
+        return np.array(self._generator_losses).mean()
+
+    @property
+    def discriminator_loss(self):
+        if not self._discriminator_losses:
+            return None
+
+        return np.array(self._discriminator_losses).mean()
 
     def update_discriminator_loss(
             self,
@@ -42,7 +75,7 @@ class GANomalyLoss:
         loss_fake = self.LOSS_FUNCTION_BCE(classifier_fake, labels_fake).mean(axis=1)
 
         discriminator_loss = (loss_real + loss_fake) / 2
-        self.discriminator_loss_epoch += discriminator_loss.data.numpy().tolist()
+        self._discriminator_losses += discriminator_loss.data.numpy().tolist()
 
         return discriminator_loss.mean()
 
@@ -68,27 +101,16 @@ class GANomalyLoss:
             + self.weight_contextual_loss * contextual_loss \
             + self.weight_encoder_loss * encoder_loss
 
-        self.adverserial_loss_epoch += adverserial_loss.data.numpy().tolist()
-        self.contextual_loss_epoch += contextual_loss.data.numpy().tolist()
-        self.encoder_loss_epoch += encoder_loss.data.numpy().tolist()
-        self.generator_loss_epoch += generator_loss.data.numpy().tolist()
+        self._adverserial_losses += adverserial_loss.data.numpy().tolist()
+        self._contextual_losses += contextual_loss.data.numpy().tolist()
+        self._encoder_losses += encoder_loss.data.numpy().tolist()
+        self._generator_losses += generator_loss.data.numpy().tolist()
 
         return generator_loss.mean()
 
     def reset(self):
-        self.adverserial_loss_epoch = []
-        self.contextual_loss_epoch = []
-        self.encoder_loss_epoch = []
-        self.generator_loss_epoch = []
-        self.discriminator_loss_epoch = []
-
-    def get_mean_epoch_results(self):
-        if not self.generator_loss_epoch or not self.discriminator_loss_epoch:
-            return None
-
-        return OrderedDict([
-            ('adverserial_loss', np.array(self.adverserial_loss_epoch).mean()),
-            ('contextual_loss', np.array(self.contextual_loss_epoch).mean()),
-            ('encoder_loss', np.array(self.encoder_loss_epoch).mean()),
-            ('generator_loss', np.array(self.generator_loss_epoch).mean()),
-            ('discriminator_loss', np.array(self.discriminator_loss_epoch).mean())])
+        self._adverserial_losses = []
+        self._contextual_losses = []
+        self._encoder_losses = []
+        self._generator_losses = []
+        self._discriminator_losses = []
