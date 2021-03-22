@@ -227,7 +227,7 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
                 and self._validation_loss_epoch_.contextual_loss \
                 and self._validation_loss_epoch_.encoder_loss:
             metrics['Validation generator loss'] = self._validation_loss_epoch_.generator_loss
-            metrics['Validation discriminator loss'] = self._validation_loss_epoch_.generator_loss
+            metrics['Validation discriminator loss'] = self._validation_loss_epoch_.discriminator_loss
             metrics['Validation adverserial loss'] = self._validation_loss_epoch_.adverserial_loss
             metrics['Validation contextual loss'] = self._validation_loss_epoch_.contextual_loss
             metrics['Validation encoder loss'] = self._validation_loss_epoch_.encoder_loss
