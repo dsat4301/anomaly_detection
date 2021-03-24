@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from base.base_anomaly_detector import BaseAnomalyDetector
-from util.data import BaseDataset
+from base.base_dataset import BaseDataset
 
 
 class BaseNNAnomalyDetector(BaseAnomalyDetector):
