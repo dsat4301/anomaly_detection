@@ -5,9 +5,13 @@ from torch.utils.data import Dataset
 
 
 class BaseDataset(Dataset):
-    """torch.utils.data.Dataset implementation."""
+    """ torch.utils.data.Dataset implementation, serving as wrapper for an np.ndarray. """
 
     def __init__(self, data: np.ndarray):
+        """
+        :param data : np.ndarray
+            The array of data.
+        """
         self.data = data.astype(float)
 
     def __len__(self):

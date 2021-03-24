@@ -13,6 +13,61 @@ from base.base_nn_anomaly_detector import BaseNNAnomalyDetector
 
 
 class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
+    """ Deep One-Class Classification.
+
+    Classification of samples as anomaly or normal data based on Deep SVDD architecture,
+    introduced by Ruff, L.et al. Deep one-class classification
+    in International conference on machine learning (2018), 4393–4402
+    (http://proceedings.mlr.press/v80/ruff18a/ruff18a.pdf).
+
+    Parameters
+    ----------
+    optimizer_name : str, default='adam'
+        The name of the optimizer.
+    learning_rate : float, default=1e-4
+        Learning rate.
+    n_epochs : int, default=10
+        The number of epochs.
+    batch_size : int, default=128
+        Batch size.
+    weight_decay : float, default=1e-6
+        The value for weight decay regularization, applied during optimization.
+    device : {'cpu', 'cuda'}, default='cpu'
+        Specifies the computational device using device agnostic code:
+        (https://pytorch.org/docs/stable/notes/cuda.html).
+    n_jobs_dataloader : int, default=4
+        Value for parameter num_workers of torch.utils.data.DataLoader
+        (https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
+        Indicates how many subprocesses to use for data loading with values greater 0 enabling
+        multi-process data loading.
+    latent_dimensions : int, default=2
+        Number of latent dimensions.
+    linear : bool, default=True
+        Specifies if only linear layers without activation are used in encoder and decoder.
+    n_hidden_features : Sequence[int], default=None
+        Is Ignored if liner is True.
+        Number of units used in the hidden encoder and decoder layers.
+    random_state : int, default=None
+        Seed value to be applied in order to create deterministic results.
+    scorer : Callable
+        Scorer instance to be used in score function.
+
+    Attributes
+    ----------
+    network_ : torch.nn.Module
+        The network.
+    hypersphere_center_ : torch.Tensor
+        The center of the hypersphere, learned during training.
+
+    Examples
+    --------
+    >>> import numpy
+    >>> from anomaly_detectors.DeepSVDD.SVDD_anomaly_detector import DeepSVDDAnomalyDetector
+    >>> data = numpy.array([[0], [0.44], [0.45], [0.46], [1]])
+    >>> deep_svdd = DeepSVDDAnomalyDetector().fit(data)
+    >>> deep_svdd.score_samples(data)
+    array([2.94518113, 1.94397306, 1.92362654, 1.90338707, 0.9694134 ])
+    """
 
     def __init__(
             self,
@@ -28,7 +83,6 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
             n_hidden_features: Sequence[int] = None,
             random_state: int = None,
             scorer: Callable = None):
-
         super().__init__(
             batch_size=batch_size,
             n_jobs_dataloader=n_jobs_dataloader,
@@ -47,10 +101,16 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
 
     @property
     def offset_(self):
+        """ Gets the threshold, applied for decision_function.
+        :rtype : float
+        """
         return self._offset_
 
     @offset_.setter
     def offset_(self, value: float):
+        """ Sets the threshold, applied for decision_function.
+        :param value : float
+        """
         # noinspection PyAttributeOutsideInit
         self._offset_ = value
 
@@ -69,12 +129,14 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
     # noinspection PyPep8Naming,SpellCheckingInspection
     def score_samples(self, X):
         """ Return the anomaly score.
-        :param X: np.ndarray of shape (n_samples, n_features)
-            Set of samples, where n_samples is the number of samples and
+
+        :param X : numpy.ndarray of shape (n_samples, n_features)
+            Set of samples to be scored, where n_samples is the number of samples and
             n_features is the number of features.
-        :return: np.ndarray with shape (n_samples,)
-            Array with positive scores with higher values indicating higher probability of the
-            sample beeing an anomaly.
+
+        :return : numpy.ndarray with shape (n_samples,)
+            Array with positive scores.
+            Higher values indicate that an instance is more likely to be anomalous.
         """
         X, _ = self._check_ready_for_prediction(X)
 
@@ -111,7 +173,7 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
             weight_decay=self.weight_decay,
             amsgrad=self.optimizer_name == 'amsgrad')
 
-        self.c_ = self._get_initial_center_c(train_loader)
+        self.hypersphere_center_ = self._get_initial_center_c(train_loader)
         self._loss_epoch_ = None
         self._validation_loss_epoch_ = None
         self._offset_ = 0
@@ -148,7 +210,7 @@ class DeepSVDDAnomalyDetector(BaseNNAnomalyDetector):
         self._loss_epoch_ += loss.data.numpy().tolist()
 
     def _get_distances_to_center(self, outputs: torch.Tensor, reduction: str):
-        distances = torch.sum((outputs - self.c_) ** 2, dim=1)
+        distances = torch.sum((outputs - self.hypersphere_center_) ** 2, dim=1)
         return distances if reduction == 'none' else distances.mean()
 
     def _log_epoch_results(self, epoch: int, epoch_train_time: float):

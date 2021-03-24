@@ -20,13 +20,15 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
     """ Semi-Supervised Anomaly Detection via Adversarial Training.
 
     Classification of samples as anomaly or normal data based on GANomaly architecture
-    introduced by: https://arxiv.org/pdf/1805.06725.pdf.
+    introduced by Akcay, S., Atapour-Abarghouei, A. & Breckon, T. P.
+    Ganomaly: Semi-supervisedanomaly detection via adversarial trainingin
+    Asian conference on computer vision (Springer, 2018), 622–637 (https://arxiv.org/pdf/1805.06725.pdf.).
     ----------
 
     Parameters
     ----------
     latent_dimensions : int, default=2
-        Latent space dimensions equivalent to the number of neurons in the last encoder layer.
+        Number of latent dimensions.
     weight_adverserial_loss : float, default=1
         Weight of the adverserial loss term in the generator loss-function.
     weight_contextual_loss : float, default=50
@@ -37,26 +39,65 @@ class GANomalyAnomalyDetector(BaseGenerativeAnomalyDetector):
         Value for parameter betas of torch optimizers
         (https://pytorch.org/docs/stable/optim.html#module-torch.optim).
         Indicates the coefficients used for computing running averages of gradient and its square.
+    device : {'cpu', 'cuda'}, default='cpu'
+        Specifies the computational device using device agnostic code:
+        (https://pytorch.org/docs/stable/notes/cuda.html).
+    n_epochs : int, default=10
+        Number of epochs.
+    batch_size : int, default=128
+        Batch size.
+    n_jobs_dataloader : int, default=4
+        Value for parameter num_workers of torch.utils.data.DataLoader
+        (https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
+        Indicates how many subprocesses to use for data loading with values greater 0 enabling
+        multi-process data loading.
+    learning_rate : float, default=0.0001
+        Learning rate.
+    linear : bool, default=True
+        Specifies if only linear layers without activation are used in encoder and decoder.
+    n_hidden_features : Sequence[int], default=None
+        Is Ignored if liner is True.
+        Number of units used in the hidden encoder and decoder layers.
+    random_state : int, default=None
+        Seed value to be applied in order to create deterministic results.
+    scorer : Callable
+        Scorer instance to be used in score function.
+    softmax_for_final_decoder_layer : bool, default=False
+        Specifies if a softmax layer is inserted after the final decoder layer.
+    reconstruction_loss_function : torch.nn.modules.loss._Loss, default=None
+        The torch.nn.modules.loss._Loss instance for determining the reconstruction loss. If None, MSELoss is used.
+
+    Attributes
+    ----------
+    generator_net_ : torch.nn.Module
+        The generator network.
+    discriminator_net_ : torch.nn.Module
+        The discriminator network.
 
     Examples
     --------
+    >>> import numpy
     >>> from anomaly_detectors.GANomaly.GANomaly_anomaly_detector import GANomalyAnomalyDetector
-    >>> data = np.array([[0], [0.44], [0.45], [0.46], [1]])
+    >>> data = numpy.array([[0], [0.44], [0.45], [0.46], [1]])
     >>> ganomaly = GANomalyAnomalyDetector().fit(data)
     >>> ganomaly.score_samples(data)
-    array([0.35026681, 0.53358972, 0.53837019, 0.54317802, 0.84332526])
-    >>> ganomaly.predict(data)
-    array([0, 1, 1, 1, 1])
+    array([2.84801, 3.31392, 3.32494, 3.33598, 3.96101])
     """
 
     PRECISION = 5
 
     @property
     def offset_(self):
+        """ Gets the threshold, applied for decision_function.
+        :rtype : float
+        """
         return self._offset_
 
     @offset_.setter
     def offset_(self, value: float):
+        """ Sets the threshold, applied for decision_function.
+        :param value : float
+        """
         # noinspection PyAttributeOutsideInit
         self._offset_ = value
 

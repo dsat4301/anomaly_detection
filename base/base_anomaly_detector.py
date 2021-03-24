@@ -34,14 +34,14 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
 
     # noinspection PyPep8Naming
     def predict(self, X: np.ndarray):
-        """ Return the classification result based on the results of decision_function.
+        """ Perform classification on samples in X.
 
         :parameter X : np.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and
             n_features is the number of features.
 
         :return : np.ndarray with shape (n_samples,)
-            Binary array with -1 indicating an anomaly and 1 indicating normal data.
+            Class labels for samples in X, -1 indicating an anomaly and 1 normal data.
         """
 
         X, _ = self._check_ready_for_prediction(X)
@@ -51,9 +51,9 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
 
     # noinspection PyPep8Naming
     def decision_function(self, X: np.ndarray) -> np.ndarray:
-        """ Return decision_function value, considering offset_.
+        """ Return decision_function value, considering the offset_.
 
-        :parameter X : np.ndarray of shape (n_samples, n_features)
+        :param X : np.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and
             n_features is the number of features.
 
@@ -68,12 +68,14 @@ class BaseAnomalyDetector(BaseEstimator, OutlierMixin):
 
     # noinspection PyPep8Naming
     def score(self, X: np.ndarray, y: np.ndarray):
-        """ Return the score based on the scorer passed as class parameter.
+        """ Return the performance score based on the samples in X and the scorer, passed as class parameter.
+
         :param X : np.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and
             n_features is the number of features.
-        :param y : np.ndarray of with shape (n_samples,), default=None
+        :param y : np.ndarray of with shape (n_samples,)
             The true anomaly labels.
+
         :return : float
             Scalar score value.
         """

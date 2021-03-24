@@ -34,7 +34,7 @@ def check_outliers_train(estimator):
         assert output.dtype == np.dtype('float')
         assert output.shape == (n_samples,)
 
-    # raises error on malformed input for predict
+    # raises error on malformed inputs for predict
     assert_raises(ValueError, estimator.predict, X.T)
 
     # decision_function agrees with predict
@@ -42,14 +42,14 @@ def check_outliers_train(estimator):
     dec_pred[dec_pred == 0] = -1
     assert_array_equal(dec_pred, y_pred)
 
-    # raises error on malformed input for decision_function
+    # raises error on malformed inputs for decision_function
     assert_raises(ValueError, estimator.decision_function, X.T)
 
     # decision_function is a translation of score_samples
     y_dec = scores - estimator.offset_
     assert_allclose(y_dec, decision)
 
-    # raises error on malformed input for score_samples
+    # raises error on malformed inputs for score_samples
     assert_raises(ValueError, estimator.score_samples, X.T)
 
     # contamination parameter (not for OneClassSVM which has the nu parameter)

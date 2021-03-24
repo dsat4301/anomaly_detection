@@ -52,7 +52,7 @@ class BaseNNAnomalyDetector(BaseAnomalyDetector):
 
     # noinspection PyPep8Naming,PyAttributeOutsideInit
     def fit(self, X: np.ndarray, y: np.ndarray = None, **kwargs):
-        """ Trains generator and discriminator based on the normal samples in data.
+        """ Trains the network parameters based on the inputs.
 
         :param X : np.ndarray of shape (n_samples, n_features)
             Set of samples, where n_samples is the number of samples and

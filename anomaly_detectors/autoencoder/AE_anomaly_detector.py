@@ -23,33 +23,33 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
     ----------
     batch_size : int, default=128
         Batch size.
-    n_jobs_dataloader: int, default=4,
+    n_jobs_dataloader : int, default=4
         Value for parameter num_workers of torch.utils.data.DataLoader
         (https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
         Indicates how many subprocesses to use for data loading with values greater 0 enabling
         multi-process data loading.
-    n_epochs: int, default=10,
+    n_epochs : int, default=10
         Number of epochs.
     device : {'cpu', 'cuda'}, default='cpu'
         Specifies the computational device using device agnostic code:
         (https://pytorch.org/docs/stable/notes/cuda.html).
     scorer : Callable
         Scorer instance to be used in score function.
-    learning_rate: float, default=0.0001,
+    learning_rate : float, default=0.0001
         Learning rate.
     linear : bool, default=True
         Specifies if only linear layers without activation are used in encoder and decoder.
     n_hidden_features : Sequence[int], default=None
         Is Ignored if liner is True.
         Number of units used in the hidden encoder and decoder layers.
-    random_state: int, default=None
-        Scorer instance used in score function.
-    latent_dimensions: int, default=2
+    random_state : int, default=None
+        Seed value to be applied in order to create deterministic results.
+    latent_dimensions : int, default=2
         Number of latent dimensions.
-    softmax_for_final_decoder_layer: bool, default=False
+    softmax_for_final_decoder_layer : bool, default=False
         Specifies if a softmax layer is inserted after the final decoder layer.
-    reconstruction_loss_function: _Loss, default=None
-        The _Loss instance for determining the reconstruction loss. If None, MSELoss is used.
+    reconstruction_loss_function : torch.nn.modules.loss._Loss, default=None
+        The torch.nn.modules.loss._Loss instance for determining the reconstruction loss. If None, MSELoss is used.
 
     Attributes
     ----------
@@ -60,8 +60,9 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
     Examples
     --------
+    >>> import numpy
     >>> from anomaly_detectors.autoencoder.AE_anomaly_detector import AEAnomalyDetector
-    >>> data = np.array([[0], [0.44], [0.45], [0.46], [1]])
+    >>> data = numpy.array([[0], [0.44], [0.45], [0.46], [1]])
     >>> ae = AEAnomalyDetector().fit(data)
     >>> ae.score_samples(data)
     array([0.26844, 0.00374, 0.00258, 0.00163, 0.27086])
@@ -106,12 +107,16 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
     @property
     def offset_(self):
-        """Gets the threshold, applied for decision_function."""
+        """ Gets the threshold, applied for decision_function.
+        :rtype : float
+        """
         return self._offset_
 
     @offset_.setter
-    def offset_(self, value):
-        """Sets the threshold, applied for decision_function"""
+    def offset_(self, value: float):
+        """ Sets the threshold, applied for decision_function.
+        :param value : float
+        """
         # noinspection PyAttributeOutsideInit
         self._offset_ = value
 
@@ -129,13 +134,13 @@ class AEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
     # noinspection PyPep8Naming
     def score_samples(self, X: np.ndarray):
-        """Return the anomaly score.
+        """ Return the anomaly score.
 
-        :param X: numpy.ndarray of shape (n_samples, n_features)
+        :param X : numpy.ndarray of shape (n_samples, n_features)
             Set of samples to be scored, where n_samples is the number of samples and
             n_features is the number of features.
 
-        :return: numpy.ndarray with shape (n_samples,)
+        :return : numpy.ndarray with shape (n_samples,)
             Array with positive scores.
             Higher values indicate that an instance is more likely to be anomalous.
         """

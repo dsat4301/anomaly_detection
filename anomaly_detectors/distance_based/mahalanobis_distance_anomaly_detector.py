@@ -7,6 +7,34 @@ from base.base_distance_anomaly_detector import BaseDistanceAnomalyDetector
 
 
 class MahalanobisDistanceAnomalyDetector(BaseDistanceAnomalyDetector):
+    """ Anomaly detection based on the Mahalanobis distance.
+
+    Parameters
+    ----------
+    scorer : Callable, default=None
+        Scorer instance to be used in score function.
+    random_state : int, default=None
+        Seed value to be applied in order to create deterministic results.
+
+    Attributes
+    ----------
+    covariance_matrix_ : np.ndarray of shape (n_features, n_features)
+        The covariance matrix determined by the call of fit.
+    inverse_covariance_matrix_ : np.ndarray of shape (n_features, n_features)
+        The inverse covariance matrix.
+    distribution_center_ : np.ndarray of shape (n_features,)
+        The mean values of the training data.
+
+    Examples
+    --------
+    >>> import numpy
+    >>> from anomaly_detectors.distance_based.mahalanobis_distance_anomaly_detector import
+    >>>     MahalanobisDistanceAnomalyDetector
+    >>> data = numpy.array([[0], [0.44], [0.45], [0.46], [1]])
+    >>> md_anomaly_detector = MahalanobisDistanceAnomalyDetector().fit(data)
+    >>> md_anomaly_detector.score_samples(data)
+    array([1.75596184e+00, 7.15421304e-03, 3.17965024e-03, 7.94912560e-04, 2.23290938e+00])
+    """
 
     def __init__(self, scorer: Callable = None, random_state: int = None):
         super(MahalanobisDistanceAnomalyDetector, self).__init__(scorer, random_state)

@@ -18,6 +18,62 @@ from base.base_networks import MultivariateGaussianEncoder, Decoder
 
 
 class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
+    """ VAE-based anomaly detection.
+
+    Prediction of anomaly scores for samples based on a reconstruction loss value.
+    Referring to Kingma, D. P. & Welling, M. Auto-encoding variational bayes (2013).
+
+    Parameters
+    ----------
+    batch_size : int, default=128
+        Batch size.
+    n_jobs_dataloader : int, default=4
+        Value for parameter num_workers of torch.utils.data.DataLoader
+        (https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader).
+        Indicates how many subprocesses to use for data loading with values greater 0 enabling
+        multi-process data loading.
+    n_epochs : int, default=10
+        Number of epochs.
+    device : {'cpu', 'cuda'}, default='cpu'
+        Specifies the computational device using device agnostic code:
+        (https://pytorch.org/docs/stable/notes/cuda.html).
+    scorer : Callable
+        Scorer instance to be used in score function.
+    learning_rate : float, default=0.0001
+        Learning rate.
+    linear : bool, default=True
+        Specifies if only linear layers without activation are used in encoder and decoder.
+    n_hidden_features : Sequence[int], default=None
+        Is Ignored if liner is True.
+        Number of units used in the hidden encoder and decoder layers.
+    random_state : int, default=None
+        Seed value to be applied in order to create deterministic results.
+    latent_dimensions : int, default=2
+        Number of latent dimensions.
+    n_draws_latent_distribution : float, default=1
+        Number of draws from the distribution modeled by the probabilistic encoder (L).
+    softmax_for_final_decoder_layer : bool, default=False
+        Specifies if a softmax layer is inserted after the final decoder layer.
+    reconstruction_loss_function : torch.nn.modules.loss._Loss, default=None
+        The torch.nn.modules.loss._Loss instance for determining the reconstruction loss. If None, MSELoss is used.
+
+    Attributes
+    ----------
+    encoder_network_ : torch.nn.Module
+        The probabilistic encoder network.
+    decoder_network_ : torch.nn.Module
+        The decoder network.
+
+    Examples
+    --------
+    >>> import numpy
+    >>> from anomaly_detectors.variational_autoencoder.VAE_anomaly_detector import VAEAnomalyDetector
+    >>> data = numpy.array([[0], [0.44], [0.45], [0.46], [1]])
+    >>> vae = VAEAnomalyDetector().fit(data)
+    >>> vae.score_samples(data)
+    array([0.42985, 0.76759, 0.21558, 0.5728 , 0.85177])
+    """
+
     LOG_VARIANCE_LOWER_LIMIT = -80
     LOG_VARIANCE_UPPER_LIMIT = 80
     PRECISION = 5
@@ -78,6 +134,17 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
 
     # noinspection PyPep8Naming
     def score_samples(self, X: np.ndarray):
+        """ Return the anomaly score.
+
+        :param X : numpy.ndarray of shape (n_samples, n_features)
+            Set of samples to be scored, where n_samples is the number of samples and
+            n_features is the number of features
+
+        :return : numpy.ndarray with shape (n_samples,)
+            Array with positive scores.
+            Higher values indicate that an instance is more likely to be anomalous.
+        """
+
         X, _ = self._check_ready_for_prediction(X)
 
         # noinspection PyTypeChecker
@@ -163,7 +230,7 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
         mean_encoder, log_variance_encoder = self.encoder_network_(inputs)
 
         # cap values to prevent infinity values caused by exponentiation
-        log_variance_encoder = self.get_log_variance_with_capped_values(log_variance_encoder)
+        log_variance_encoder = self._get_log_variance_with_capped_values(log_variance_encoder)
 
         # Acc. to Géron, A. (Hands-on machine learning with Scikit-Learn, Keras, and TensorFlow:Concepts, tools
         # and techniques to build intelligent systems (O’Reilly Media, 2019); p. 589),
@@ -179,7 +246,7 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
         return kl_divergence, expected_reconstruction_errors
 
     @staticmethod
-    def get_log_variance_with_capped_values(log_variance_encoder: torch.Tensor):
+    def _get_log_variance_with_capped_values(log_variance_encoder: torch.Tensor):
         log_variance_encoder[log_variance_encoder > VAEAnomalyDetector.LOG_VARIANCE_UPPER_LIMIT] = \
             VAEAnomalyDetector.LOG_VARIANCE_UPPER_LIMIT
         log_variance_encoder[log_variance_encoder < VAEAnomalyDetector.LOG_VARIANCE_LOWER_LIMIT] = \
@@ -204,7 +271,7 @@ class VAEAnomalyDetector(BaseGenerativeAnomalyDetector):
                torch.einsum('ij,ikj->ikj', standard_deviation, epsilon).flatten(end_dim=1)
 
     def _sample(self, mean: torch.Tensor, log_variance: torch.Tensor) -> torch.Tensor:
-        log_variance = self.get_log_variance_with_capped_values(log_variance)
+        log_variance = self._get_log_variance_with_capped_values(log_variance)
 
         if self.random_state is not None:
             samples = mean + log_variance.exp()
